@@ -5,7 +5,7 @@ import { StationPtyProvider } from './station-pty-provider'
 
 type MockStationClient = Pick<
   StationClient,
-  'createPty' | 'openPtyStream' | 'resizePty' | 'closePty'
+  'createPty' | 'openPtyStream' | 'resizePty' | 'closePty' | 'getPtyStatus'
 >
 
 class FakeWebSocket implements StationWebSocket {
@@ -50,7 +50,8 @@ function createClient(socket: FakeWebSocket): MockStationClient {
     }),
     openPtyStream: vi.fn().mockResolvedValue(socket),
     resizePty: vi.fn().mockResolvedValue(undefined),
-    closePty: vi.fn().mockResolvedValue(undefined)
+    closePty: vi.fn().mockResolvedValue(undefined),
+    getPtyStatus: vi.fn().mockResolvedValue({ pty_id: 'pty_123', status: 'running' })
   }
 }
 
@@ -116,6 +117,19 @@ describe('StationPtyProvider', () => {
     expect(result).toEqual({
       id: 'ssh:station%3Aws_123@@pty_123',
       pid: 456
+    })
+  })
+
+  it('spawns the shell even when the renderer provides startup command text', async () => {
+    await provider.spawn({ cols: 80, rows: 24, command: 'codex \"do work\"' })
+
+    expect(client.createPty).toHaveBeenCalledWith('ws_123', {
+      name: 'orca-codex \"do work\"',
+      argv: ['zsh'],
+      cwd: '/home/station/workspace',
+      env: {},
+      rows: 24,
+      cols: 80
     })
   })
 
@@ -201,6 +215,22 @@ describe('StationPtyProvider', () => {
     socket.emit('close')
 
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('emits exit when Station closes the stream because the remote PTY exited', async () => {
+    const handler = vi.fn()
+    provider.onExit(handler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    vi.mocked(client.getPtyStatus).mockResolvedValueOnce({
+      pty_id: 'pty_123',
+      status: 'exited',
+      exit_code: 17
+    })
+
+    socket.emit('close')
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledWith({ id, code: 17 }))
+
+    expect(await provider.listProcesses()).toEqual([])
   })
 
   it('shutdown closes only the tracked PTY and emits exit for that PTY', async () => {

@@ -22,6 +22,12 @@ export type StationCreatePtyResponse = {
   handle: { pty_id: string; process_id: string; reused: boolean }
 }
 
+export type StationPtyStatusResponse = {
+  pty_id: string
+  status: 'running' | 'exited' | 'missing'
+  exit_code?: number | null
+}
+
 export type StationCreatePtyRequest = {
   name: string
   argv: string[]
@@ -130,6 +136,13 @@ export class StationClient {
 
   async closePty(workspaceId: string, ptyId: string): Promise<void> {
     await this.request('DELETE', this.ptyPath(workspaceId, ptyId))
+  }
+
+  getPtyStatus(workspaceId: string, ptyId: string): Promise<StationPtyStatusResponse> {
+    return this.requestJson<StationPtyStatusResponse>(
+      'GET',
+      this.ptyPath(workspaceId, ptyId, 'status')
+    )
   }
 
   getPtyStreamInfo(workspaceId: string, ptyId: string): Promise<StationStreamInfo> {

@@ -57,7 +57,7 @@ export class StationPtyProvider implements IPtyProvider {
 
     const response = await this.client.createPty(this.workspaceId, {
       name: opts.command ? `orca-${opts.command}` : 'orca-shell',
-      argv: [opts.command ?? DEFAULT_SHELL],
+      argv: [DEFAULT_SHELL],
       cwd: opts.cwd ?? DEFAULT_CWD,
       env: opts.env ?? {},
       rows: opts.rows,
@@ -261,6 +261,7 @@ export class StationPtyProvider implements IPtyProvider {
       if (this.sockets.get(appId) === socket) {
         this.sockets.delete(appId)
       }
+      void this.emitExitIfRemotePtyStopped(appId, tracked.ptyId)
     })
     socket.on('error', (error) => {
       console.error('[station-pty] stream transport error', {
@@ -269,6 +270,28 @@ export class StationPtyProvider implements IPtyProvider {
       })
     })
     this.sockets.set(appId, socket)
+  }
+
+  private async emitExitIfRemotePtyStopped(appId: string, ptyId: string): Promise<void> {
+    if (this.disposed || !this.trackedPtys.has(appId)) {
+      return
+    }
+    let status: Awaited<ReturnType<StationClient['getPtyStatus']>>
+    try {
+      status = await this.client.getPtyStatus(this.workspaceId, ptyId)
+    } catch (error) {
+      console.error('[station-pty] status after stream close failed', {
+        id: appId,
+        error: sanitizeStationPtyTransportError(error)
+      })
+      return
+    }
+    if (status.status !== 'exited' && status.status !== 'missing') {
+      return
+    }
+    this.sockets.delete(appId)
+    this.trackedPtys.delete(appId)
+    this.emitExit({ id: appId, code: status.exit_code ?? 0 })
   }
 
   private async closeSpawnedPty(ptyId: string): Promise<void> {
