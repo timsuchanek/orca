@@ -334,20 +334,20 @@ const WorktreeCard = React.memo(function WorktreeCard({
       getWorkspacePortsByWorktreeId(s.workspacePortScan?.result).get(worktree.id) ??
       EMPTY_WORKSPACE_PORTS
   )
+  // Why: Station and runtime-owned targets manage connectivity outside the user-facing SSH UI.
+  const sshConnectionId =
+    repo?.connectionId != null &&
+    !isStationConnectionId(repo.connectionId) &&
+    !isRuntimeOwnedSshTargetId(repo.connectionId)
+      ? repo.connectionId
+      : null
 
   // SSH disconnected state
   const sshStatus = useAppStore((s) => {
-    // Why: runtime-owned (per-workspace-env) SSH targets are hidden and their relay health is
-    // owned by the runtime layer — Orca suppresses their ssh:state-changed broadcasts, so their
-    // state is absent here. Don't show a false "disconnected" SSH chip for them.
-    if (
-      !repo?.connectionId ||
-      isRuntimeOwnedSshTargetId(repo.connectionId) ||
-      isStationConnectionId(repo.connectionId)
-    ) {
+    if (!sshConnectionId) {
       return null
     }
-    const state = s.sshConnectionStates.get(repo.connectionId)
+    const state = s.sshConnectionStates.get(sshConnectionId)
     return state?.status ?? 'disconnected'
   })
   const isSshDisconnected = sshStatus != null && sshStatus !== 'connected'
@@ -1425,7 +1425,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
               </RepoIdentityChip>
             )}
 
-            {repo?.connectionId && (
+            {sshConnectionId && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="shrink-0 inline-flex items-center">
@@ -1934,12 +1934,12 @@ const WorktreeCard = React.memo(function WorktreeCard({
         </WorktreeContextMenu>
       )}
 
-      {repo?.connectionId && !isStationConnectionId(repo.connectionId) && (
+      {sshConnectionId && (
         <SshDisconnectedDialog
           open={showDisconnectedDialog && isSshDisconnected}
           onOpenChange={setShowDisconnectedDialog}
-          targetId={repo.connectionId}
-          targetLabel={sshTargetLabel || repo.displayName}
+          targetId={sshConnectionId}
+          targetLabel={sshTargetLabel || repo?.displayName || sshConnectionId}
           status={sshStatus ?? 'disconnected'}
         />
       )}

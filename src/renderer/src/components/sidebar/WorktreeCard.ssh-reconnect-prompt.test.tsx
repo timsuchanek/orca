@@ -170,6 +170,8 @@ describe('WorktreeCard SSH reconnect prompt', () => {
     )
 
     expect(markup).not.toContain('data-ssh-disconnected-dialog=')
+    expect(markup).not.toContain('Project on SSH host')
+    expect(markup).not.toContain('SSH disconnected')
   })
 
   it('marks a runtime-host worktree disconnected when its environment has no status', () => {
