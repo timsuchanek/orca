@@ -877,6 +877,10 @@ export default function WorktreeJumpPalette(): React.JSX.Element | null {
     )
   }, [openModal, prefetchCreateWorkspaceBaseForComposer])
 
+  const openAttachStationWorkspaceAction = useCallback(() => {
+    queueMicrotask(() => openModal('attach-station-workspace'))
+  }, [openModal])
+
   const deleteActiveWorkspaceAction = useCallback(() => {
     const { activeView, activeWorktreeId } = useAppStore.getState()
     if (activeView !== 'terminal' || !activeWorktreeId) {
@@ -901,12 +905,14 @@ export default function WorktreeJumpPalette(): React.JSX.Element | null {
         openNewMarkdownFile: openNewMarkdownInActiveWorkspace,
         openNewTerminalTab: openNewTerminalTabInActiveWorkspace,
         openCreateWorkspace: openCreateWorkspaceAction,
+        openAttachStationWorkspace: openAttachStationWorkspaceAction,
         deleteActiveWorkspace: deleteActiveWorkspaceAction,
         openAddQuickCommand: openAddQuickCommandAction
       }),
     [
       deleteActiveWorkspaceAction,
       openAddQuickCommandAction,
+      openAttachStationWorkspaceAction,
       openCreateWorkspaceAction,
       openNewBrowserTabInActiveWorkspace,
       openNewMarkdownInActiveWorkspace,

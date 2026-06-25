@@ -11,6 +11,7 @@ import {
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { createConnectionIdForFileSelector } from './connection-owner-resolution'
+import { stationWorktreeId } from '@/store/slices/worktrees'
 
 const initialState = useAppStore.getInitialState()
 
@@ -59,6 +60,46 @@ describe('getConnectionId', () => {
     })
 
     expect(getConnectionId('repo-missing::/tmp/repo-feature')).toBeUndefined()
+  })
+
+  it('resolves Station workspace routing from the synthetic repo/worktree mapping', () => {
+    useAppStore.setState({
+      repos: [
+        makeRepo({
+          id: 'station:ws_123',
+          path: '/home/station/workspace',
+          displayName: 'Station Demo',
+          connectionId: 'station:ws_123'
+        })
+      ],
+      worktreesByRepo: {
+        'station:ws_123': [
+          {
+            id: stationWorktreeId('ws_123'),
+            repoId: 'station:ws_123',
+            path: '/home/station/workspace',
+            head: 'station:ws_123',
+            branch: 'refs/heads/station/ws_123',
+            isBare: false,
+            isMainWorktree: true,
+            displayName: 'Station Demo',
+            comment: '',
+            linkedIssue: null,
+            linkedPR: null,
+            linkedLinearIssue: null,
+            linkedGitLabMR: null,
+            linkedGitLabIssue: null,
+            isArchived: false,
+            isUnread: false,
+            isPinned: false,
+            sortOrder: 0,
+            lastActivityAt: 0
+          }
+        ]
+      }
+    })
+
+    expect(getConnectionId(stationWorktreeId('ws_123'))).toBe('station:ws_123')
   })
 
   it('resolves SSH targets for folder workspaces from repos in the folder scope', () => {

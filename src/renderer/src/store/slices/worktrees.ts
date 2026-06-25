@@ -9,6 +9,7 @@ import type {
   ForceDeleteWorktreeBranchResult,
   FolderWorkspace,
   GitHubPrStartPoint,
+  Repo,
   Worktree,
   WorkspaceVisibleTabType,
   GitPushTarget,
@@ -90,6 +91,8 @@ const ACTIVE_WORKTREE_TERMINAL_PREP_IDLE_TIMEOUT_MS = 180
 // a higher ceiling cuts startup scan batches (#7225) while staying bounded so
 // one UI moment can't launch every git probe at once.
 export const WORKTREE_REFRESH_CONCURRENCY = 8
+const STATION_WORKSPACE_ROOT = '/home/station/workspace'
+const STATION_REPO_BADGE_COLOR = '#0f766e'
 const pendingActivationTerminalPrepCancels = new Map<string, () => void>()
 const detachedHeadAutoDerivedDisplayNames = new Map<string, string>()
 const folderWorkspaceWorktreeCache = new WeakMap<FolderWorkspace, Worktree>()
@@ -98,6 +101,86 @@ const detectedWorktreeRefreshesInFlight = new Map<string, Promise<DetectedWorktr
 
 type BackgroundRuntimeRefreshOptions = {
   reuseRecentCompatibilityFailure?: boolean
+}
+
+function stationRepoId(workspaceId: string): string {
+  return `station:${workspaceId}`
+}
+
+function getStationWorkspaceDisplayName(name: string, workspaceId: string): string {
+  const trimmedName = name.trim()
+  if (trimmedName.length > 0) {
+    return trimmedName
+  }
+  return `Station ${workspaceId.slice(0, 8)}`
+}
+
+export function stationWorktreeId(workspaceId: string): string {
+  return `station://workspace/${workspaceId}`
+}
+
+export function upsertStationWorkspaceState(
+  state: Pick<AppState, 'repos' | 'worktreesByRepo'>,
+  args: { workspaceId: string; name: string }
+): {
+  repo: Repo
+  worktree: Worktree
+  repos: Repo[]
+  worktreesByRepo: AppState['worktreesByRepo']
+} {
+  const repoId = stationRepoId(args.workspaceId)
+  const worktreeId = stationWorktreeId(args.workspaceId)
+  const displayName = getStationWorkspaceDisplayName(args.name, args.workspaceId)
+  const existingRepo = state.repos.find((repo) => repo.id === repoId)
+  const existingWorktrees = state.worktreesByRepo[repoId] ?? []
+  const existingWorktree = existingWorktrees.find((worktree) => worktree.id === worktreeId)
+  const repo: Repo = {
+    ...existingRepo,
+    id: repoId,
+    path: STATION_WORKSPACE_ROOT,
+    displayName,
+    badgeColor: existingRepo?.badgeColor ?? STATION_REPO_BADGE_COLOR,
+    addedAt: existingRepo?.addedAt ?? Date.now(),
+    kind: existingRepo?.kind ?? 'folder',
+    connectionId: repoId
+  }
+  const worktree: Worktree = {
+    ...existingWorktree,
+    id: worktreeId,
+    repoId,
+    path: STATION_WORKSPACE_ROOT,
+    head: existingWorktree?.head ?? repoId,
+    branch: existingWorktree?.branch ?? `refs/heads/station/${args.workspaceId}`,
+    isBare: false,
+    isMainWorktree: existingWorktree?.isMainWorktree ?? true,
+    displayName,
+    comment: existingWorktree?.comment ?? '',
+    linkedIssue: existingWorktree?.linkedIssue ?? null,
+    linkedPR: existingWorktree?.linkedPR ?? null,
+    linkedLinearIssue: existingWorktree?.linkedLinearIssue ?? null,
+    linkedGitLabMR: existingWorktree?.linkedGitLabMR ?? null,
+    linkedGitLabIssue: existingWorktree?.linkedGitLabIssue ?? null,
+    isArchived: existingWorktree?.isArchived ?? false,
+    isUnread: existingWorktree?.isUnread ?? false,
+    isPinned: existingWorktree?.isPinned ?? false,
+    sortOrder: existingWorktree?.sortOrder ?? 0,
+    lastActivityAt: existingWorktree?.lastActivityAt ?? Date.now()
+  }
+  const repos = existingRepo
+    ? state.repos.map((entry) => (entry.id === repoId ? repo : entry))
+    : [...state.repos, repo]
+  const worktrees = existingWorktree
+    ? existingWorktrees.map((entry) => (entry.id === worktreeId ? worktree : entry))
+    : [...existingWorktrees, worktree]
+  return {
+    repo,
+    worktree,
+    repos,
+    worktreesByRepo: {
+      ...state.worktreesByRepo,
+      [repoId]: worktrees
+    }
+  }
 }
 
 async function mapReposForWorktreeRefresh<TRepo extends { id: string }, TResult>(

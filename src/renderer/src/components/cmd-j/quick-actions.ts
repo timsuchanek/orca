@@ -1,4 +1,4 @@
-import { FileText, FolderPlus, Globe, Play, SquareTerminal, Trash2 } from 'lucide-react'
+import { FileText, FolderPlus, Globe, Play, Plug, SquareTerminal, Trash2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CmdJQuickActionAvailability, CmdJQuickActionContext } from './quick-action-context'
 import {
@@ -111,6 +111,38 @@ export const getCmdJQuickActions = createLocalizedCatalog((): CmdJQuickAction[] 
     ],
     isAvailable: workspaceActionAvailability,
     run: (ctx) => runWorkspaceAction(ctx, ctx.openNewTerminalTab)
+  },
+  {
+    id: 'attach-station-workspace',
+    kind: 'action',
+    title: translate(
+      'auto.components.cmd.j.quick.actions.attachStationWorkspace',
+      'Attach Station Workspace'
+    ),
+    description: translate(
+      'auto.components.cmd.j.quick.actions.attachStationWorkspaceDescription',
+      'Attach a Station workspace by ID.'
+    ),
+    icon: Plug,
+    verbKeywords: [
+      translate(
+        'auto.components.cmd.j.quick.actions.verbs.attachStationWorkspace',
+        'attach station workspace'
+      ),
+      translate(
+        'auto.components.cmd.j.quick.actions.verbs.attachStation',
+        'attach station'
+      ),
+      translate(
+        'auto.components.cmd.j.quick.actions.verbs.stationWorkspace',
+        'station workspace'
+      )
+    ],
+    isAvailable: () => ({ available: true }),
+    run: async (ctx) => {
+      ctx.openAttachStationWorkspace()
+      return { status: 'ok' }
+    }
   },
   {
     id: CREATE_WORKSPACE_QUICK_ACTION_ID,

@@ -30,6 +30,7 @@ export type CmdJQuickActionContext = {
   openNewMarkdownFile: (groupId: string) => Promise<void>
   openNewTerminalTab: (groupId: string) => Promise<void>
   openCreateWorkspace: () => void
+  openAttachStationWorkspace: () => void
   deleteActiveWorkspace: () => void
   openAddQuickCommand: () => void
 }
@@ -132,6 +133,7 @@ export function buildCmdJQuickActionContext(args: {
   openNewMarkdownFile: (groupId: string) => Promise<void>
   openNewTerminalTab: (groupId: string) => Promise<void>
   openCreateWorkspace: () => void
+  openAttachStationWorkspace: () => void
   deleteActiveWorkspace: () => void
   openAddQuickCommand: () => void
 }): CmdJQuickActionContext {
@@ -164,6 +166,7 @@ export function buildCmdJQuickActionContext(args: {
     openNewMarkdownFile: args.openNewMarkdownFile,
     openNewTerminalTab: args.openNewTerminalTab,
     openCreateWorkspace: args.openCreateWorkspace,
+    openAttachStationWorkspace: args.openAttachStationWorkspace,
     deleteActiveWorkspace: args.deleteActiveWorkspace,
     openAddQuickCommand: args.openAddQuickCommand
   }

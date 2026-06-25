@@ -327,6 +327,9 @@ const NonGitFolderDialog = lazy(() => import('./components/sidebar/NonGitFolderD
 const AddProjectFromFolderDialog = lazy(
   () => import('./components/sidebar/AddProjectFromFolderDialog')
 )
+const AttachStationWorkspaceDialog = lazy(
+  () => import('./components/sidebar/AttachStationWorkspaceDialog')
+)
 const ProjectAddedDialog = lazy(() => import('./components/sidebar/ProjectAddedDialog'))
 const DeleteWorktreeDialog = lazy(() => import('./components/sidebar/DeleteWorktreeDialog'))
 const DictationController = lazy(() =>
@@ -2581,6 +2584,16 @@ function App(): React.JSX.Element {
                   compact
                 >
                   <AddProjectFromFolderDialog />
+                </RecoverableRenderErrorBoundary>
+              ) : null}
+              {activeModal === 'attach-station-workspace' ? (
+                <RecoverableRenderErrorBoundary
+                  boundaryId="modal.attach-station-workspace"
+                  surface="modal"
+                  resetKey
+                  compact
+                >
+                  <AttachStationWorkspaceDialog />
                 </RecoverableRenderErrorBoundary>
               ) : null}
               {activeModal === 'project-added' ? (

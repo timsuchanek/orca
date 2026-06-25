@@ -788,6 +788,7 @@ export type UISlice = {
     | 'delete-worktree'
     | 'forget-ssh-workspace'
     | 'confirm-add-project-from-folder'
+    | 'attach-station-workspace'
     | 'confirm-non-git-folder'
     | 'confirm-remove-folder'
     | 'add-repo'

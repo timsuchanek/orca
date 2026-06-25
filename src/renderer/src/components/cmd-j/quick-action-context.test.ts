@@ -107,6 +107,7 @@ describe('Cmd+J quick action context', () => {
       openNewMarkdownFile: async () => {},
       openNewTerminalTab: async () => {},
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {},
       openAddQuickCommand: () => {}
     } satisfies CmdJQuickActionContext
@@ -141,6 +142,7 @@ describe('Cmd+J quick action context', () => {
       openNewMarkdownFile: async () => {},
       openNewTerminalTab: async () => {},
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {},
       openAddQuickCommand: () => {}
     } satisfies CmdJQuickActionContext
@@ -221,6 +223,7 @@ describe('Cmd+J quick action context', () => {
       openNewMarkdownFile: async () => {},
       openNewTerminalTab: async () => {},
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {},
       openAddQuickCommand: () => {}
     })
@@ -247,6 +250,7 @@ describe('Cmd+J quick action context', () => {
       openNewMarkdownFile: async () => {},
       openNewTerminalTab: async () => {},
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {},
       openAddQuickCommand: () => {}
     })
@@ -267,6 +271,7 @@ describe('Cmd+J quick action context', () => {
         calls.push(groupId)
       },
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {},
       openAddQuickCommand: () => {}
     } satisfies CmdJQuickActionContext
@@ -289,6 +294,7 @@ describe('Cmd+J quick action context', () => {
       openNewMarkdownFile: async () => {},
       openNewTerminalTab: async () => {},
       openCreateWorkspace: () => {},
+      openAttachStationWorkspace: () => {},
       deleteActiveWorkspace: () => {
         calls.push('delete')
       },

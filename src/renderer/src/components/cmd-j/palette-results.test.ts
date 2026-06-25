@@ -60,6 +60,16 @@ const actions: CmdJQuickAction[] = [
     run: noopRun
   },
   {
+    id: 'attach-station-workspace',
+    kind: 'action',
+    title: 'Attach Station Workspace',
+    description: 'Attach a Station workspace by ID.',
+    icon: Globe,
+    verbKeywords: ['attach station workspace', 'attach station', 'station workspace'],
+    isAvailable: available,
+    run: noopRun
+  },
+  {
     id: 'delete-workspace',
     kind: 'action',
     title: 'Delete Worktree',
@@ -176,6 +186,9 @@ describe('Cmd+J palette middle-band ranking', () => {
     ['create worktree', 'create-workspace'],
     ['add worktree', 'create-workspace'],
     ['new worktree', 'create-workspace'],
+    ['attach station workspace', 'attach-station-workspace'],
+    ['attach station', 'attach-station-workspace'],
+    ['station workspace', 'attach-station-workspace'],
     ['delete worktree', 'delete-workspace'],
     ['remove worktree', 'delete-workspace'],
     ['terminal settings', 'settings:terminal'],

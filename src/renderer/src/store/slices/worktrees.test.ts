@@ -101,6 +101,8 @@ import {
   createWorktreeSlice,
   getHostedReviewLinkMutationGenerationForTests,
   getHostedReviewLinkWorktreeAliasCountForTests,
+  stationWorktreeId,
+  upsertStationWorkspaceState,
   resetHostedReviewLinkMutationGenerationForTests
 } from './worktrees'
 import type { PendingWorktreeCreation } from '@/lib/pending-worktree-creation'
@@ -290,6 +292,94 @@ describe('folder workspace lookups', () => {
       displayName: folderWorkspace.name,
       path: folderWorkspace.folderPath
     })
+  })
+})
+
+describe('Station workspace synthetic state', () => {
+  it('creates the synthetic repo and worktree with Station routing metadata', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(123_456)
+    try {
+      const state = createTestStore().getState()
+
+      const result = upsertStationWorkspaceState(state, {
+        workspaceId: 'ws_1234567890',
+        name: 'Demo Workspace'
+      })
+
+      expect(result.repo).toMatchObject({
+        id: 'station:ws_1234567890',
+        path: '/home/station/workspace',
+        displayName: 'Demo Workspace',
+        connectionId: 'station:ws_1234567890'
+      })
+      expect(result.worktree).toMatchObject({
+        id: stationWorktreeId('ws_1234567890'),
+        repoId: 'station:ws_1234567890',
+        path: '/home/station/workspace',
+        displayName: 'Demo Workspace'
+      })
+      expect(result.repos).toContainEqual(expect.objectContaining({ id: 'station:ws_1234567890' }))
+      expect(result.worktreesByRepo['station:ws_1234567890']).toEqual([
+        expect.objectContaining({
+          id: stationWorktreeId('ws_1234567890'),
+          repoId: 'station:ws_1234567890'
+        })
+      ])
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it('reuses the synthetic repo/worktree and refreshes the display name', () => {
+    const state = createTestStore().getState()
+    const existingWorktreeId = stationWorktreeId('ws_existing')
+    const existingWorktree = makeWorktree({
+      id: existingWorktreeId,
+      repoId: 'station:ws_existing',
+      path: '/home/station/workspace',
+      displayName: 'Old Name',
+      comment: 'keep me',
+      isPinned: true
+    })
+
+    const result = upsertStationWorkspaceState(
+      {
+        ...state,
+        repos: [
+          {
+            id: 'station:ws_existing',
+            path: '/tmp/old',
+            displayName: 'Old Name',
+            badgeColor: '#000',
+            addedAt: 1,
+            connectionId: 'station:ws_existing'
+          }
+        ],
+        worktreesByRepo: {
+          'station:ws_existing': [existingWorktree]
+        }
+      } as AppState,
+      {
+        workspaceId: 'ws_existing',
+        name: 'Fresh Name'
+      }
+    )
+
+    expect(result.repos).toHaveLength(1)
+    expect(result.repos[0]).toMatchObject({
+      id: 'station:ws_existing',
+      path: '/home/station/workspace',
+      displayName: 'Fresh Name',
+      connectionId: 'station:ws_existing'
+    })
+    expect(result.worktreesByRepo['station:ws_existing']).toEqual([
+      expect.objectContaining({
+        id: existingWorktreeId,
+        displayName: 'Fresh Name',
+        comment: 'keep me',
+        isPinned: true
+      })
+    ])
   })
 })
 
