@@ -70,6 +70,20 @@ function trackedPty(
   }
 }
 
+function deferredPromise<T>(): {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
+}
+
 describe('StationPtyProvider', () => {
   let socket: FakeWebSocket
   let client: MockStationClient
@@ -220,6 +234,54 @@ describe('StationPtyProvider', () => {
       { id: second.id, cwd: '/tmp/two', title: 'orca-zsh' }
     ])
     expect(exitHandler).toHaveBeenCalledWith({ id: first.id, code: 0 })
+  })
+
+  it('preserves tracked state and suppresses exit when remote close fails', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+
+    vi.mocked(client.closePty).mockRejectedValueOnce(new Error('close failed'))
+
+    await expect(provider.shutdown(id, {})).rejects.toThrow('close failed')
+
+    expect(socket.close).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+    expect(exitHandler).not.toHaveBeenCalled()
+  })
+
+  it('attach reopens a Station stream for an untracked Station app PTY id', async () => {
+    const id = 'ssh:station%3Aws_123@@pty_existing'
+
+    await provider.attach(id)
+
+    expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_existing')
+    expect(provider.hasPty(id)).toBe(true)
+    expect(await provider.listProcesses()).toEqual([
+      { id, cwd: '/home/station/workspace', title: 'orca-shell' }
+    ])
+  })
+
+  it('ignores stale socket close events after reopen during explicit shutdown', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSocket)
+    await provider.attach(id)
+
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+    const shutdownPromise = provider.shutdown(id, {})
+
+    socket.emit('close')
+    closeRequest.resolve(undefined)
+
+    await shutdownPromise
+
+    expect(reopenedSocket.close).toHaveBeenCalledTimes(1)
+    expect(exitHandler).toHaveBeenCalledWith({ id, code: 0 })
   })
 
   it('serializes known PTY ids and revive reopens their streams', async () => {

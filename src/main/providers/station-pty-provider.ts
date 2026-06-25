@@ -27,7 +27,6 @@ export class StationPtyProvider implements IPtyProvider {
   private replayListeners = new Set<ReplayCallback>()
   private sockets = new Map<string, StationWebSocket>()
   private trackedPtys = new Map<string, TrackedPty>()
-  private explicitShutdowns = new Set<string>()
 
   constructor(
     private readonly connectionId: string,
@@ -77,7 +76,16 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   async attach(id: string): Promise<void> {
-    await this.openStream(this.toAppPtyId(this.toRawPtyId(id)))
+    const rawPtyId = this.toRawPtyId(id)
+    const appId = this.toAppPtyId(rawPtyId)
+    if (!this.trackedPtys.has(appId)) {
+      this.trackPty(appId, {
+        ptyId: rawPtyId,
+        cwd: DEFAULT_CWD,
+        title: 'orca-shell'
+      })
+    }
+    await this.openStream(appId)
   }
 
   write(id: string, data: string): void {
@@ -100,21 +108,13 @@ export class StationPtyProvider implements IPtyProvider {
   async shutdown(id: string, _opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
     const tracked = this.requireTrackedPty(appId)
-    this.explicitShutdowns.add(appId)
-    try {
-      await this.client.closePty(this.workspaceId, tracked.ptyId)
-    } finally {
-      const socket = this.sockets.get(appId)
-      try {
-        socket?.close()
-      } finally {
-        this.sockets.delete(appId)
-        this.trackedPtys.delete(appId)
-        if (this.explicitShutdowns.delete(appId)) {
-          this.emitExit({ id: appId, code: 0 })
-        }
-      }
-    }
+    await this.client.closePty(this.workspaceId, tracked.ptyId)
+
+    const socket = this.sockets.get(appId)
+    this.sockets.delete(appId)
+    this.trackedPtys.delete(appId)
+    socket?.close()
+    this.emitExit({ id: appId, code: 0 })
   }
 
   async sendSignal(_id: string, _signal: string): Promise<void> {
@@ -240,7 +240,6 @@ export class StationPtyProvider implements IPtyProvider {
       if (this.sockets.get(appId) === socket) {
         this.sockets.delete(appId)
       }
-      this.explicitShutdowns.delete(appId)
     })
     this.sockets.set(appId, socket)
   }
