@@ -348,6 +348,9 @@ describe('StationPtyProvider', () => {
       'Station PTY stream open failed: Bearer [REDACTED]'
     )
 
+    expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_123')).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
     expect(
       consoleError.mock.calls.some((call) => call.some((value) => String(value).includes('secret')))
     ).toBe(false)

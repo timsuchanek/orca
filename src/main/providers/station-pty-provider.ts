@@ -63,12 +63,18 @@ export class StationPtyProvider implements IPtyProvider {
       cols: opts.cols
     })
     const appId = this.toAppPtyId(response.handle.pty_id)
-    this.trackPty(appId, {
+    const tracked = {
       ptyId: response.handle.pty_id,
       cwd: opts.cwd ?? response.pty.cwd ?? DEFAULT_CWD,
       title: response.pty.name || (opts.command ? `orca-${opts.command}` : 'orca-shell')
-    })
-    await this.openStream(appId)
+    }
+    try {
+      await this.openStream(appId, tracked)
+    } catch (error) {
+      await this.closeSpawnedPty(response.handle.pty_id)
+      throw error
+    }
+    this.trackPty(appId, tracked)
     return {
       id: appId,
       pid: parseStationPid(response.handle.process_id)
@@ -222,8 +228,7 @@ export class StationPtyProvider implements IPtyProvider {
     return tracked
   }
 
-  private async openStream(appId: string): Promise<void> {
-    const tracked = this.requireTrackedPty(appId)
+  private async openStream(appId: string, tracked = this.requireTrackedPty(appId)): Promise<void> {
     const priorSocket = this.sockets.get(appId)
     if (priorSocket && priorSocket.readyState === SOCKET_OPEN) {
       priorSocket.close()
@@ -242,6 +247,14 @@ export class StationPtyProvider implements IPtyProvider {
       }
     })
     this.sockets.set(appId, socket)
+  }
+
+  private async closeSpawnedPty(ptyId: string): Promise<void> {
+    try {
+      await this.client.closePty(this.workspaceId, ptyId)
+    } catch {
+      // Best-effort cleanup: preserve the original openStream error for callers.
+    }
   }
 
   private emitData(payload: { id: string; data: string }): void {
