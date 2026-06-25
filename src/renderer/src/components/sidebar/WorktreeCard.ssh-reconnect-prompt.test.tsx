@@ -148,6 +148,30 @@ describe('WorktreeCard SSH reconnect prompt', () => {
     expect(markup).toContain('SSH disconnected')
   })
 
+  it('does not open the SSH reconnect dialog for Station worktrees', () => {
+    sshConnectionStates.set('station:ws_123', { status: 'disconnected' })
+
+    const stationRepo: Repo = {
+      ...makeRepo(),
+      id: 'station:ws_123',
+      connectionId: 'station:ws_123',
+      displayName: 'Station workspace'
+    }
+    const stationWorktree: Worktree = {
+      ...makeWorktree(),
+      id: 'station://workspace/ws_123',
+      repoId: 'station:ws_123',
+      path: '/home/station/workspace',
+      displayName: 'Station workspace'
+    }
+
+    const markup = renderToStaticMarkup(
+      <WorktreeCard worktree={stationWorktree} repo={stationRepo} isActive={true} />
+    )
+
+    expect(markup).not.toContain('data-ssh-disconnected-dialog=')
+  })
+
   it('marks a runtime-host worktree disconnected when its environment has no status', () => {
     const runtimeRepo: Repo = {
       ...makeRepo(),

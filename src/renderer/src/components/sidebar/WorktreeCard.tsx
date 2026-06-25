@@ -91,6 +91,10 @@ type WorktreeRenameRequest = {
 
 export type ActiveSurfaceVariant = 'primary' | 'secondary'
 
+function isStationConnectionId(connectionId: string | null | undefined): boolean {
+  return connectionId?.startsWith('station:') === true
+}
+
 type WorktreeCardProps = {
   worktree: Worktree
   repo: Repo | undefined
@@ -336,7 +340,11 @@ const WorktreeCard = React.memo(function WorktreeCard({
     // Why: runtime-owned (per-workspace-env) SSH targets are hidden and their relay health is
     // owned by the runtime layer — Orca suppresses their ssh:state-changed broadcasts, so their
     // state is absent here. Don't show a false "disconnected" SSH chip for them.
-    if (!repo?.connectionId || isRuntimeOwnedSshTargetId(repo.connectionId)) {
+    if (
+      !repo?.connectionId ||
+      isRuntimeOwnedSshTargetId(repo.connectionId) ||
+      isStationConnectionId(repo.connectionId)
+    ) {
       return null
     }
     const state = s.sshConnectionStates.get(repo.connectionId)
@@ -1926,7 +1934,7 @@ const WorktreeCard = React.memo(function WorktreeCard({
         </WorktreeContextMenu>
       )}
 
-      {repo?.connectionId && (
+      {repo?.connectionId && !isStationConnectionId(repo.connectionId) && (
         <SshDisconnectedDialog
           open={showDisconnectedDialog && isSshDisconnected}
           onOpenChange={setShowDisconnectedDialog}
