@@ -147,13 +147,14 @@ export function registerStationWorkspaceHandlers(
       return
     }
     const activePtyIds = (await active.provider.listProcesses()).map((pty) => pty.id)
-    active.unsubscribeEvents()
-    unregisterSshPtyProvider(active.connectionId)
-    active.provider.dispose()
     for (const ptyId of activePtyIds) {
       clearProviderPtyState(ptyId)
       deletePtyOwnership(ptyId)
+      runtime?.onPtyExit(ptyId, 0)
     }
+    active.unsubscribeEvents()
+    unregisterSshPtyProvider(active.connectionId)
+    active.provider.dispose()
     activeStationWorkspaces.delete(workspaceId)
   })
 }

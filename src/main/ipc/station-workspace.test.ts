@@ -285,6 +285,15 @@ describe('registerStationWorkspaceHandlers', () => {
     expect(mainWindow.webContents.send).not.toHaveBeenCalled()
   })
 
+  it('notifies runtime about active Station PTYs during detach', async () => {
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+
+    await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
+
+    expect(runtime.onPtyExit).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1', 0)
+  })
+
   it('rejects missing Station credentials without registering a provider', async () => {
     loadStationCredentialsMock.mockImplementation(() => {
       throw new Error(
