@@ -35,7 +35,8 @@ describe('getVisibleRightSidebarActivityItems', () => {
       getVisibleRightSidebarActivityItems(items, {
         isFolder: false,
         isFolderWorkspace: false,
-        isSshRepo: false
+        isSshRepo: false,
+        isStationRepo: false
       }).map((item) => item.id)
     ).toEqual(['explorer', 'source-control'])
 
@@ -43,7 +44,8 @@ describe('getVisibleRightSidebarActivityItems', () => {
       getVisibleRightSidebarActivityItems(items, {
         isFolder: false,
         isFolderWorkspace: false,
-        isSshRepo: true
+        isSshRepo: true,
+        isStationRepo: false
       }).map((item) => item.id)
     ).toEqual(['explorer', 'source-control', 'ports'])
   })
@@ -53,7 +55,8 @@ describe('getVisibleRightSidebarActivityItems', () => {
       getVisibleRightSidebarActivityItems(items, {
         isFolder: true,
         isFolderWorkspace: true,
-        isSshRepo: true
+        isSshRepo: true,
+        isStationRepo: false
       }).map((item) => item.id)
     ).toEqual(['explorer', 'workspaces', 'pr-checks', 'ports'])
 
@@ -61,8 +64,32 @@ describe('getVisibleRightSidebarActivityItems', () => {
       getVisibleRightSidebarActivityItems(items, {
         isFolder: true,
         isFolderWorkspace: false,
-        isSshRepo: true
+        isSshRepo: true,
+        isStationRepo: false
       }).map((item) => item.id)
     ).toEqual(['explorer', 'ports'])
+  })
+
+  it('hides explorer and ports for Station terminal-only worktrees', () => {
+    expect(
+      getVisibleRightSidebarActivityItems(items, {
+        isFolder: true,
+        isFolderWorkspace: false,
+        isSshRepo: false,
+        isStationRepo: true
+      }).map((item) => item.id)
+    ).toEqual([])
+
+    expect(
+      getVisibleRightSidebarActivityItems(
+        [{ id: 'vault', icon: Files, title: 'Agents', shortcut: '' }, ...items],
+        {
+          isFolder: true,
+          isFolderWorkspace: false,
+          isSshRepo: false,
+          isStationRepo: true
+        }
+      ).map((item) => item.id)
+    ).toEqual(['vault'])
   })
 })

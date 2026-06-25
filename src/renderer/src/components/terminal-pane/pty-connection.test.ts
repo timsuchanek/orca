@@ -4531,6 +4531,68 @@ describe('connectPanePty', () => {
     }
   })
 
+  it('inherits the Station connection id when a split pane spawns from a synthetic Station worktree', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+
+    const stationId = 'ws_station_split'
+    const worktreeId = `station://workspace/${stationId}`
+    const connectionId = `station:${stationId}`
+    const transport = createMockTransport('pty-station-split')
+    transportFactoryQueue.push(transport)
+
+    mockStoreState = {
+      ...mockStoreState,
+      activeWorktreeId: worktreeId,
+      tabsByWorktree: {
+        [worktreeId]: [{ id: 'tab-1', ptyId: null, title: 'Station Demo' }]
+      },
+      ptyIdsByTabId: {
+        'tab-1': []
+      },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: {
+            type: 'split',
+            direction: 'vertical',
+            first: { type: 'leaf', leafId: LEAF_1 },
+            second: { type: 'leaf', leafId: LEAF_2 }
+          },
+          activeLeafId: LEAF_1,
+          expandedLeafId: null,
+          ptyIdsByLeafId: {}
+        }
+      },
+      worktreesByRepo: {
+        [connectionId]: [
+          {
+            id: worktreeId,
+            repoId: connectionId,
+            path: '/home/station/workspace',
+            displayName: 'Station Demo'
+          }
+        ]
+      },
+      repos: [{ id: connectionId, connectionId, displayName: 'Station Demo' }]
+    }
+
+    const pane = createPane(2)
+    const manager = createManager(2)
+    const deps = createDeps({
+      worktreeId,
+      cwd: '/home/station/workspace'
+    })
+
+    connectPanePty(pane as never, manager as never, deps as never)
+    await flushAsyncTicks()
+
+    expect(createdTransportOptions[0]).toMatchObject({
+      connectionId,
+      worktreeId,
+      cwd: '/home/station/workspace'
+    })
+    expect(transport.connect).toHaveBeenCalledOnce()
+  })
+
   it('waits for the SSH shell-ready marker before sending hinted startup commands', async () => {
     const pendingTimeouts: (() => void)[] = []
     const originalSetTimeout = globalThis.setTimeout

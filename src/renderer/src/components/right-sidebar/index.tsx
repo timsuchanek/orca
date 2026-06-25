@@ -50,6 +50,7 @@ import {
 import { getRendererAppPlatform } from '@/lib/renderer-app-platform'
 
 const ACTIVITY_BAR_SIDE_WIDTH = 40
+const STATION_CONNECTION_PREFIX = 'station:'
 
 function RightSidebarInner(): React.JSX.Element {
   const hasDesktopWindowChrome = shouldRenderDesktopWindowChrome({
@@ -83,7 +84,9 @@ function RightSidebarInner(): React.JSX.Element {
   const activeWorkspaceScope = parseWorkspaceKey(activeWorktreeId ?? '')
   const isFolderWorkspace = activeWorkspaceScope?.type === 'folder'
   const isFolder = isFolderWorkspace || (activeRepo ? isFolderRepo(activeRepo) : false)
-  const isSshRepo = Boolean(activeRepo?.connectionId)
+  const repoConnectionId = activeRepo?.connectionId?.trim() ?? ''
+  const isStationRepo = repoConnectionId.startsWith(STATION_CONNECTION_PREFIX)
+  const isSshRepo = Boolean(repoConnectionId) && !isStationRepo
 
   const activityItems = useMemo<ActivityBarItem[]>(
     () => [
@@ -146,9 +149,10 @@ function RightSidebarInner(): React.JSX.Element {
       getVisibleRightSidebarActivityItems(activityItems, {
         isFolder,
         isFolderWorkspace,
-        isSshRepo
+        isSshRepo,
+        isStationRepo
       }),
-    [activityItems, isFolder, isFolderWorkspace, isSshRepo]
+    [activityItems, isFolder, isFolderWorkspace, isSshRepo, isStationRepo]
   )
 
   const rememberedFolderTabByWorkspaceKeyRef = useRef<Record<string, ActiveRightSidebarTab>>({})
