@@ -246,6 +246,12 @@ export class StationPtyProvider implements IPtyProvider {
         this.sockets.delete(appId)
       }
     })
+    socket.on('error', (error) => {
+      console.error('[station-pty] stream transport error', {
+        id: appId,
+        error: sanitizeStationPtyTransportError(error)
+      })
+    })
     this.sockets.set(appId, socket)
   }
 
@@ -289,4 +295,12 @@ function decodeStationMessage(payload: unknown): string | null {
     return Buffer.from(payload).toString('utf8')
   }
   return null
+}
+
+function sanitizeStationPtyTransportError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s"'},\]]+/gi, '$1[REDACTED]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/("bearer_token"\s*:\s*")[^"]*"/gi, '$1[REDACTED]"')
 }

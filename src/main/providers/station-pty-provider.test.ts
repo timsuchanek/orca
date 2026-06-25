@@ -284,6 +284,43 @@ describe('StationPtyProvider', () => {
     expect(exitHandler).toHaveBeenCalledWith({ id, code: 0 })
   })
 
+  it('keeps PTY state intact when the Station socket emits an error', async () => {
+    const exitHandler = vi.fn()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+
+    socket.emit(
+      'error',
+      new Error('Station stream transport failed: Authorization: Bearer secret-token')
+    )
+
+    expect(exitHandler).not.toHaveBeenCalled()
+    expect(provider.hasPty(id)).toBe(true)
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+
+    provider.write(id, 'echo hello')
+    await provider.attach(id)
+    await provider.shutdown(id, {})
+
+    expect(socket.send).toHaveBeenCalledWith(Buffer.from('echo hello', 'utf8'))
+    expect(client.openPtyStream).toHaveBeenCalledTimes(2)
+    expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(consoleError).toHaveBeenCalledWith(
+      '[station-pty] stream transport error',
+      expect.objectContaining({
+        id,
+        error: 'Station stream transport failed: Authorization: Bearer [REDACTED]'
+      })
+    )
+    expect(
+      consoleError.mock.calls.some((call) =>
+        call.some((value) => String(value).includes('secret-token'))
+      )
+    ).toBe(false)
+    consoleError.mockRestore()
+  })
+
   it('serializes known PTY ids and revive reopens their streams', async () => {
     const first = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
     const secondSocket = new FakeWebSocket()
