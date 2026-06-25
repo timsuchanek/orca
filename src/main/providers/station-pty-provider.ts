@@ -27,6 +27,7 @@ export class StationPtyProvider implements IPtyProvider {
   private replayListeners = new Set<ReplayCallback>()
   private sockets = new Map<string, StationWebSocket>()
   private trackedPtys = new Map<string, TrackedPty>()
+  private disposed = false
 
   constructor(
     private readonly connectionId: string,
@@ -206,6 +207,21 @@ export class StationPtyProvider implements IPtyProvider {
   onExit(callback: ExitCallback): () => void {
     this.exitListeners.add(callback)
     return () => this.exitListeners.delete(callback)
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return
+    }
+    this.disposed = true
+    for (const socket of this.sockets.values()) {
+      socket.close()
+    }
+    this.sockets.clear()
+    this.trackedPtys.clear()
+    this.dataListeners.clear()
+    this.replayListeners.clear()
+    this.exitListeners.clear()
   }
 
   private toRawPtyId(id: string): string {

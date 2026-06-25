@@ -393,4 +393,44 @@ describe('StationPtyProvider', () => {
     ).toBe(false)
     consoleError.mockRestore()
   })
+
+  it('dispose closes active Station streams, clears tracked PTYs, and skips remote close', async () => {
+    const dataHandler = vi.fn()
+    const exitHandler = vi.fn()
+    provider.onData(dataHandler)
+    provider.onExit(exitHandler)
+
+    const first = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const secondSocket = new FakeWebSocket()
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: trackedPty({
+        pty_id: 'pty_456',
+        process_id: '789',
+        name: 'orca-zsh',
+        cwd: '/tmp/two'
+      }),
+      handle: {
+        pty_id: 'pty_456',
+        process_id: '789',
+        reused: false
+      }
+    })
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(secondSocket)
+    const second = await provider.spawn({ cols: 100, rows: 30, command: 'zsh', cwd: '/tmp/two' })
+
+    provider.dispose()
+
+    expect(socket.close).toHaveBeenCalledTimes(1)
+    expect(secondSocket.close).toHaveBeenCalledTimes(1)
+    expect(client.closePty).not.toHaveBeenCalled()
+    expect(provider.hasPty(first.id)).toBe(false)
+    expect(provider.hasPty(second.id)).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+
+    socket.emit('message', Buffer.from('after-dispose', 'utf8'), true)
+    secondSocket.emit('close')
+
+    expect(dataHandler).not.toHaveBeenCalled()
+    expect(exitHandler).not.toHaveBeenCalled()
+  })
 })
