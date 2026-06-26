@@ -90,6 +90,9 @@ export class StationPtyProvider implements IPtyProvider {
   async attach(id: string): Promise<void> {
     const rawPtyId = this.toRawPtyId(id)
     const appId = this.toAppPtyId(rawPtyId)
+    if (this.terminatingPtys.has(appId)) {
+      return
+    }
     if (!this.trackedPtys.has(appId)) {
       const tracked = {
         ptyId: rawPtyId,

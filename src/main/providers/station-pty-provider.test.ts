@@ -441,6 +441,21 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
+  it('ignores attach while explicit terminate is in flight', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    await provider.attach(id)
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+
+    expect(client.openPtyStream).toHaveBeenCalledTimes(1)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)
