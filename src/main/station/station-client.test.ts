@@ -24,6 +24,16 @@ class FakeWebSocket {
   }
 }
 
+class ThrowingWebSocket {
+  constructor() {
+    throw {
+      toString: () => {
+        throw new Error('stringify failed')
+      }
+    }
+  }
+}
+
 const ORIGINAL_FETCH = globalThis.fetch
 
 function okJsonResponse(value: unknown): Response {
@@ -205,6 +215,24 @@ describe('StationClient', () => {
     )
     expect(FakeWebSocket.instances[0]?.options?.headers?.Authorization).not.toContain(
       'dtok_test:secret'
+    )
+  })
+
+  it('throws sanitized WebSocket construction errors for unprintable thrown values', async () => {
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        url: 'ws://127.0.0.1:18080/v1/pty/pty_123/stream',
+        bearer_token: 'stream-secret-token'
+      })
+    )
+    const client = new StationClient({
+      baseUrl: 'http://127.0.0.1:18080',
+      bearerToken: 'dtok_test:secret',
+      WebSocketCtor: ThrowingWebSocket as unknown as StationWebSocketConstructor
+    })
+
+    await expect(client.openPtyStream('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY stream open failed: [unprintable error]'
     )
   })
 

@@ -166,7 +166,7 @@ export class StationClient {
       })
     } catch (error) {
       const message = sanitizeStationErrorMessage(
-        error instanceof Error ? error.message : String(error),
+        stationErrorMessage(error),
         [this.opts.bearerToken, info.bearer_token]
       )
       throw new Error(`Station PTY stream open failed: ${message}`)
@@ -192,7 +192,7 @@ export class StationClient {
       })
     } catch (error) {
       const message = sanitizeStationErrorMessage(
-        error instanceof Error ? error.message : String(error),
+        stationErrorMessage(error),
         [this.opts.bearerToken]
       )
       throw new Error(`Station request failed: ${message}`)
@@ -225,6 +225,17 @@ export class StationClient {
     const encodedPtyId = encodeURIComponent(ptyId)
     const base = `/v1/workspaces/${encodedWorkspaceId}/pty/${encodedPtyId}`
     return suffix ? `${base}/${suffix}` : base
+  }
+}
+
+function stationErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  try {
+    return String(error)
+  } catch {
+    return '[unprintable error]'
   }
 }
 
