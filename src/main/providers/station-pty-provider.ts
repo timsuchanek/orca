@@ -272,9 +272,6 @@ export class StationPtyProvider implements IPtyProvider {
       throw new Error('Station PTY provider disposed')
     }
     const priorSocket = this.sockets.get(appId)
-    if (priorSocket && priorSocket.readyState === SOCKET_OPEN) {
-      priorSocket.close()
-    }
     const socket = await this.client.openPtyStream(this.workspaceId, tracked.ptyId)
     if (this.disposed) {
       socket.close()
@@ -303,6 +300,9 @@ export class StationPtyProvider implements IPtyProvider {
       })
     })
     this.sockets.set(appId, socket)
+    if (priorSocket && priorSocket !== socket && priorSocket.readyState === SOCKET_OPEN) {
+      priorSocket.close()
+    }
     return socket
   }
 

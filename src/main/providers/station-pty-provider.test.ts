@@ -480,6 +480,24 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('keeps the existing Station stream alive when reattach fails to open a replacement', async () => {
+    const dataHandler = vi.fn()
+    provider.onData(dataHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    vi.mocked(client.openPtyStream).mockRejectedValueOnce(new Error('replacement failed'))
+
+    await expect(provider.attach(id)).rejects.toThrow('replacement failed')
+
+    expect(socket.close).not.toHaveBeenCalled()
+    expect(provider.hasPty(id)).toBe(true)
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+    socket.emit('message', Buffer.from('still-live', 'utf8'), true)
+    provider.write(id, 'after-failed-reattach')
+
+    expect(dataHandler).toHaveBeenCalledWith({ id, data: 'still-live' })
+    expect(socket.send).toHaveBeenCalledWith(Buffer.from('after-failed-reattach', 'utf8'))
+  })
+
   it('ignores stale socket close events after reopen during explicit shutdown', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
