@@ -350,6 +350,7 @@ describe('registerStationWorkspaceHandlers', () => {
     })
 
     await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
+    expect(removeStationWorkspaceMock).toHaveBeenCalledWith('ws_123')
     expect(unregisterSshPtyProviderMock).toHaveBeenCalledWith(stationConnectionId('ws_123'))
     expect(disposeSpy).toHaveBeenCalledTimes(1)
     expect(clearProviderPtyStateMock).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1')
@@ -371,6 +372,15 @@ describe('registerStationWorkspaceHandlers', () => {
     await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
 
     expect(runtime.onPtyExit).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1', 0)
+  })
+
+  it('removes a persisted Station workspace even when detach has no active provider', async () => {
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
+
+    expect(removeStationWorkspaceMock).toHaveBeenCalledWith('ws_123')
+    expect(unregisterSshPtyProviderMock).not.toHaveBeenCalled()
   })
 
   it('detaches and unregisters when active Station PTY listing fails', async () => {

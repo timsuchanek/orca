@@ -213,6 +213,7 @@ export function registerStationWorkspaceHandlers(
 
   ipcMain.handle('stationWorkspace:detach', async (_event, rawArgs: unknown) => {
     const { workspaceId } = parseWorkspaceArgs(rawArgs)
+    requireStationWorkspaceStore(store).removeStationWorkspace(workspaceId)
     const active = activeStationWorkspaces.get(workspaceId)
     if (!active) {
       return

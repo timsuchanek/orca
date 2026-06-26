@@ -25,7 +25,11 @@ import {
 import { takeCurrentPtyDeliveryAckCredit } from './terminal-pty-ack-gate'
 import { serializeWithAbsoluteCursor } from '../../../../shared/terminal-serialize-absolute-cursor'
 import { isTerminalQueryReply } from '../../../../shared/terminal-query-reply'
-import { isStationConnectionId } from '../../../../shared/station-connection-id'
+import {
+  isStationConnectionId,
+  parseStationConnectionId
+} from '../../../../shared/station-connection-id'
+import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { PtyBufferSnapshot, PtyConnectResult } from './pty-transport'
 import { createIpcPtyTransport } from './pty-transport'
 import { createRemoteRuntimePtyTransport } from './remote-runtime-pty-transport'
@@ -795,7 +799,15 @@ function isSessionOwnedByWorktree(sessionId: string, worktreeId: string): boolea
   if (separatorIdx === -1) {
     return true
   }
-  return sessionId.slice(0, separatorIdx) === worktreeId
+  const encodedOwner = sessionId.slice(0, separatorIdx)
+  if (encodedOwner === worktreeId) {
+    return true
+  }
+  const parsedSshId = parseAppSshPtyId(sessionId)
+  const stationWorkspaceId = parsedSshId
+    ? parseStationConnectionId(parsedSshId.connectionId)?.workspaceId
+    : null
+  return stationWorkspaceId !== null && worktreeId === `station://workspace/${stationWorkspaceId}`
 }
 
 function shouldWritePtyOutputForeground(isPaneVisible: boolean): boolean {

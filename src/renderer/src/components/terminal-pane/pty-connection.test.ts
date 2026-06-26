@@ -15769,8 +15769,9 @@ describe('connectPanePty', () => {
     expect(api.pty.signal).toHaveBeenCalledWith('leaf-session', 'SIGWINCH')
   })
 
-  it('reattaches restored Station panes without probing or connecting SSH', async () => {
+  it('reattaches restored Station panes with their real persisted Station PTY app id', async () => {
     const { connectPanePty } = await import('./pty-connection')
+    const stationPtyId = 'ssh:station%3Aws_123@@pty_019efcab63117a93ac4ab54dcae3c910'
     const transport = createMockTransport()
     transport.connect.mockImplementation(async (opts: { sessionId?: string }) => {
       return { id: opts.sessionId ?? 'pty-new', replay: 'restored-station-output' }
@@ -15779,8 +15780,18 @@ describe('connectPanePty', () => {
 
     mockStoreState = {
       ...mockStoreState,
-      tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-      repos: [{ id: 'repo1', connectionId: 'station:ws_123' }],
+      tabsByWorktree: { 'station://workspace/ws_123': [{ id: 'tab-1', ptyId: null }] },
+      worktreesByRepo: {
+        'station:ws_123': [
+          {
+            id: 'station://workspace/ws_123',
+            repoId: 'station:ws_123',
+            path: '/station/ws_123',
+            displayName: 'Station Workspace'
+          }
+        ]
+      },
+      repos: [{ id: 'station:ws_123', connectionId: 'station:ws_123', displayName: 'Station Workspace' }],
       deferredSshReconnectTargets: ['station:ws_123'],
       deferredSshSessionIdsByTabId: { 'tab-1': 'stale-ssh-session' }
     }
@@ -15788,8 +15799,9 @@ describe('connectPanePty', () => {
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps({
+      worktreeId: 'station://workspace/ws_123',
       restoredLeafId: LEAF_1,
-      restoredPtyIdByLeafId: { [LEAF_1]: 'station-session-1' }
+      restoredPtyIdByLeafId: { [LEAF_1]: stationPtyId }
     })
 
     connectPanePty(pane as never, manager as never, deps as never)
@@ -15813,11 +15825,11 @@ describe('connectPanePty', () => {
       expect.objectContaining({ connectionId: 'station:ws_123' })
     )
     expect(transport.connect).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'station-session-1' })
+      expect.objectContaining({ sessionId: stationPtyId })
     )
     expect(mockStoreState.removeDeferredSshSessionId).not.toHaveBeenCalled()
-    expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(1, 'station-session-1')
-    expect(deps.updateTabPtyId).toHaveBeenCalledWith('tab-1', 'station-session-1')
+    expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(1, stationPtyId)
+    expect(deps.updateTabPtyId).toHaveBeenCalledWith('tab-1', stationPtyId)
   })
 
   it('does not auto-reconnect after a user cancels deferred SSH passphrase auth', async () => {

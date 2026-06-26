@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalLayoutSnapshot, WorkspaceSessionState } from '../../../shared/types'
 import { stationConnectionId } from '../../../shared/station-connection-id'
-import { createTestStore, makeTab } from '../store/slices/store-test-helpers'
+import { createTestStore, makeTab, makeTabGroup, makeUnifiedTab } from '../store/slices/store-test-helpers'
 
 type MockTransport = {
   attach: ReturnType<typeof vi.fn>
@@ -126,14 +126,14 @@ function createManager() {
   }
 }
 
-function createDeps(worktreeId: string) {
+function createDeps(worktreeId: string, ptyId = 'station-session-1') {
   return {
     tabId: 'tab-1',
     worktreeId,
     cwd: `/station/${worktreeId}`,
     startup: null,
     restoredLeafId: LEAF_ID,
-    restoredPtyIdByLeafId: { [LEAF_ID]: 'station-session-1' },
+    restoredPtyIdByLeafId: { [LEAF_ID]: ptyId },
     paneTransportsRef: { current: new Map() },
     paneMode2031Ref: { current: new Map() },
     paneLastThemeModeRef: { current: new Map() },
@@ -199,26 +199,48 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     const workspaceId = 'ws_123'
     const repoId = stationConnectionId(workspaceId)
     const worktreeId = `station://workspace/${workspaceId}`
+    const stationPtyId = 'ssh:station%3Aws_123@@pty_019efcab63117a93ac4ab54dcae3c910'
+    const groupId = 'group-1'
     const terminalLayout: TerminalLayoutSnapshot = {
       root: { type: 'leaf', leafId: LEAF_ID },
       activeLeafId: LEAF_ID,
       expandedLeafId: null,
-      ptyIdsByLeafId: { [LEAF_ID]: 'station-session-1' }
+      ptyIdsByLeafId: { [LEAF_ID]: stationPtyId }
     }
     const session: WorkspaceSessionState = {
       activeRepoId: repoId,
       activeWorktreeId: worktreeId,
       activeTabId: 'tab-1',
       tabsByWorktree: {
-        [worktreeId]: [makeTab({ id: 'tab-1', worktreeId, ptyId: 'station-session-1' })]
+        [worktreeId]: [makeTab({ id: 'tab-1', worktreeId, ptyId: stationPtyId })]
       },
       terminalLayoutsByTabId: {
         'tab-1': terminalLayout
       },
+      unifiedTabs: {
+        [worktreeId]: [
+          makeUnifiedTab({
+            id: 'tab-1',
+            entityId: 'tab-1',
+            groupId,
+            worktreeId,
+            contentType: 'terminal',
+            label: 'Station Shell'
+          })
+        ]
+      },
+      tabGroups: {
+        [worktreeId]: [makeTabGroup({ id: groupId, worktreeId, activeTabId: 'tab-1', tabOrder: ['tab-1'] })]
+      },
+      activeGroupIdByWorktree: { [worktreeId]: groupId },
+      tabGroupLayouts: {
+        [worktreeId]: {
+          type: 'leaf',
+          groupId
+        }
+      },
       activeWorktreeIdsOnShutdown: [worktreeId]
     }
-
-    currentStore.getState().hydrateWorkspaceSession(session)
 
     const reconnectEvents: string[] = []
     const reconnectPersistedTerminals = currentStore.getState().reconnectPersistedTerminals
@@ -303,11 +325,26 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     }
 
     const startupModule = await import('./station-workspace-startup')
+    await startupModule.hydratePersistedStationWorkspaceState()
+    currentStore.getState().hydrateWorkspaceSession(session)
+    currentStore.getState().hydrateTabsSession(session)
     const startupPromise = startupModule.restorePersistedStationWorkspaceTerminals()
     await flushAsyncTicks()
 
+    expect(currentStore.getState().activeRepoId).toBe(repoId)
+    expect(currentStore.getState().activeWorktreeId).toBe(worktreeId)
+    expect(currentStore.getState().unifiedTabsByWorktree[worktreeId]).toEqual([
+      expect.objectContaining({ id: 'tab-1', worktreeId })
+    ])
+    expect(currentStore.getState().groupsByWorktree[worktreeId]).toEqual([
+      expect.objectContaining({ id: groupId, activeTabId: 'tab-1' })
+    ])
+    expect(currentStore.getState().layoutByWorktree[worktreeId]).toEqual({
+      type: 'leaf',
+      groupId
+    })
     expect(reconnectEvents).toEqual([])
-    expect(startupEvents).toEqual(['list', 'attach:start'])
+    expect(startupEvents).toEqual(['list', 'list', 'attach:start'])
     expect(currentStore.getState().repos).toEqual([
       expect.objectContaining({ id: repoId, connectionId: repoId })
     ])
@@ -318,18 +355,18 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     resolveAttach()
     await startupPromise
 
-    expect(startupEvents).toEqual(['list', 'attach:start', 'attach:resolved', 'await-services'])
+    expect(startupEvents).toEqual(['list', 'list', 'attach:start', 'attach:resolved', 'await-services'])
     expect(reconnectEvents).toEqual(['reconnect'])
     expect(currentStore.getState().tabsByWorktree[worktreeId]).toEqual([
-      expect.objectContaining({ id: 'tab-1', ptyId: 'station-session-1' })
+      expect.objectContaining({ id: 'tab-1', ptyId: stationPtyId })
     ])
     expect(currentStore.getState().tabsByWorktree[worktreeId]).toHaveLength(1)
-    expect(currentStore.getState().ptyIdsByTabId['tab-1']).toEqual(['station-session-1'])
+    expect(currentStore.getState().ptyIdsByTabId['tab-1']).toEqual([stationPtyId])
 
     queuedTransport = createMockTransport()
     const pane = createPane()
     const manager = createManager()
-    const deps = createDeps(worktreeId)
+    const deps = createDeps(worktreeId, stationPtyId)
     const { connectPanePty } = await import('../components/terminal-pane/pty-connection')
 
     connectPanePty(pane as never, manager as never, deps as never)
@@ -352,7 +389,7 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     expect(createdTransportOptions[0]).toEqual(expect.objectContaining({ connectionId: repoId }))
     expect(queuedTransport.connect).toHaveBeenCalledTimes(1)
     expect(queuedTransport.connect).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'station-session-1' })
+      expect.objectContaining({ sessionId: stationPtyId })
     )
     expect(currentStore.getState().tabsByWorktree[worktreeId]).toHaveLength(1)
   })

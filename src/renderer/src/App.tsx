@@ -177,7 +177,11 @@ import {
   hasRequestedBackgroundTerminalWorktreeMount,
   subscribeBackgroundTerminalWorktreeMountRequests
 } from './components/terminal/background-terminal-worktree-mount'
-import { restorePersistedStationWorkspaceTerminals } from './station/station-workspace-startup'
+import {
+  hydratePersistedStationWorkspaceState,
+  restorePersistedStationWorkspaceTerminals
+} from './station/station-workspace-startup'
+import { isStationConnectionId } from '../../shared/station-connection-id'
 
 // Why: agents alive during a hard kill (crash, forced update install) need a
 // reasonably fresh resume record on disk; one minute bounds the lost window
@@ -966,6 +970,7 @@ function App(): React.JSX.Element {
         )
         await keybindingsPromise
         if (!cancelled) {
+          await hydratePersistedStationWorkspaceState()
           const sessionHydrationOptions = {
             additionalValidWorkspaceKeys: collectFolderWorkspaceKeysFromSession(sessionRead.session)
           }
@@ -1006,7 +1011,7 @@ function App(): React.JSX.Element {
           // startup before the user has context.
           const connectionIds = sessionRead.session.activeConnectionIdsAtShutdown ?? []
           const sshConnectionIds = connectionIds.filter(
-            (connectionId) => !connectionId.startsWith('station:')
+            (connectionId) => !isStationConnectionId(connectionId)
           )
           if (sshConnectionIds.length > 0) {
             try {

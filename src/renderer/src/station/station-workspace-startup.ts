@@ -6,22 +6,62 @@ type StationWorkspaceStartupFailure = {
   message: string
 }
 
+async function listPersistedStationWorkspaces(): Promise<{
+  workspaces: Awaited<ReturnType<typeof window.api.stationWorkspace.list>>
+  failed: StationWorkspaceStartupFailure[]
+}> {
+  try {
+    return {
+      workspaces: await window.api.stationWorkspace.list(),
+      failed: []
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      workspaces: [],
+      failed: [{ workspaceId: '*', message }]
+    }
+  }
+}
+
+function logStationStartupFailures(failures: StationWorkspaceStartupFailure[]): void {
+  for (const failure of failures) {
+    console.warn(
+      `Station workspace startup restore skipped ${failure.workspaceId}: ${failure.message}`
+    )
+  }
+}
+
+export async function hydratePersistedStationWorkspaceState(): Promise<{
+  registered: string[]
+  failed: StationWorkspaceStartupFailure[]
+}> {
+  const { workspaces, failed } = await listPersistedStationWorkspaces()
+  for (const workspace of workspaces) {
+    upsertStationWorkspaceIntoRendererState({
+      workspaceId: workspace.workspaceId,
+      name: workspace.name
+    })
+  }
+  return {
+    registered: workspaces.map((workspace) => workspace.workspaceId),
+    failed
+  }
+}
+
 export async function rehydratePersistedStationWorkspaces(): Promise<{
   registered: string[]
   failed: StationWorkspaceStartupFailure[]
 }> {
-  let persistedWorkspaces: Awaited<ReturnType<typeof window.api.stationWorkspace.list>>
-  try {
-    persistedWorkspaces = await window.api.stationWorkspace.list()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+  const { workspaces, failed: listFailures } = await listPersistedStationWorkspaces()
+  if (listFailures.length > 0) {
     return {
       registered: [],
-      failed: [{ workspaceId: '*', message }]
+      failed: listFailures
     }
   }
   const results = await Promise.allSettled(
-    persistedWorkspaces.map(async (workspace) => {
+    workspaces.map(async (workspace) => {
       try {
         upsertStationWorkspaceIntoRendererState({
           workspaceId: workspace.workspaceId,
@@ -71,7 +111,8 @@ export async function restorePersistedStationWorkspaceTerminals(
     onBeforeReconnect?: () => void
   }
 ): Promise<void> {
-  await rehydratePersistedStationWorkspaces()
+  const restoreResult = await rehydratePersistedStationWorkspaces()
+  logStationStartupFailures(restoreResult.failed)
   await window.api.app.awaitFirstWindowStartupServices()
   options?.onBeforeReconnect?.()
   await useAppStore.getState().reconnectPersistedTerminals(signal)

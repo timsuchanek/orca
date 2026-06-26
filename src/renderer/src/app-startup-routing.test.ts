@@ -78,6 +78,9 @@ describe('renderer startup runtime routing', () => {
       join(process.cwd(), 'src/renderer/src/station/station-workspace-startup.ts'),
       'utf8'
     )
+    const stateHydrateIndex = appSource.indexOf('await hydratePersistedStationWorkspaceState()')
+    const workspaceHydrateIndex = appSource.indexOf('actions.hydrateWorkspaceSession(session)')
+    const tabsHydrateIndex = appSource.indexOf('actions.hydrateTabsSession(session)')
     const helperCallIndex = appSource.indexOf(
       'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
     )
@@ -86,6 +89,9 @@ describe('renderer startup runtime routing', () => {
     const servicesIndex = startupSource.indexOf('await window.api.app.awaitFirstWindowStartupServices()')
     const reconnectIndex = startupSource.indexOf('await useAppStore.getState().reconnectPersistedTerminals')
 
+    expect(stateHydrateIndex).toBeGreaterThanOrEqual(0)
+    expect(stateHydrateIndex).toBeLessThan(workspaceHydrateIndex)
+    expect(stateHydrateIndex).toBeLessThan(tabsHydrateIndex)
     expect(helperCallIndex).toBeGreaterThanOrEqual(0)
     expect(helperCallIndex).toBeLessThan(hydrationSucceededIndex)
     expect(stationRehydrateIndex).toBeGreaterThanOrEqual(0)
@@ -122,7 +128,7 @@ describe('renderer startup runtime routing', () => {
     const sshReconnectBlock = source.slice(sshReconnectStart, sshReconnectEnd)
 
     expect(sshReconnectBlock).toContain('const sshConnectionIds = connectionIds.filter(')
-    expect(sshReconnectBlock).toContain("!connectionId.startsWith('station:')")
+    expect(sshReconnectBlock).toContain('!isStationConnectionId(connectionId)')
     expect(sshReconnectBlock).toContain('if (sshConnectionIds.length > 0) {')
     expect(sshReconnectBlock).toContain('const targets = sshConnectionIds.map((targetId) => ({')
     expect(sshReconnectBlock).not.toContain('const targets = connectionIds.map((targetId) => ({')
