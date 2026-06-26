@@ -112,11 +112,24 @@ describe('StationClient', () => {
 
   it('rejects malformed inspect workspace responses', async () => {
     fetchMock.mockResolvedValueOnce(okJsonResponse({ workspace: { id: 'ws_123' } }))
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        ...inspectResponse(),
+        workspace: {
+          ...inspectResponse().workspace,
+          lifecycle: null,
+          tombstoned: 'false'
+        }
+      })
+    )
     const client = new StationClient({
       baseUrl: 'http://127.0.0.1:18080',
       bearerToken: 'dtok_test:secret'
     })
 
+    await expect(client.inspectWorkspace('ws_123')).rejects.toThrow(
+      'Station inspect workspace response was invalid'
+    )
     await expect(client.inspectWorkspace('ws_123')).rejects.toThrow(
       'Station inspect workspace response was invalid'
     )

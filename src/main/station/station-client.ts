@@ -281,6 +281,11 @@ function validateInspectWorkspaceResponse(
     response.workspace.id.length === 0 ||
     typeof response.workspace.name !== 'string' ||
     response.workspace.name.length === 0 ||
+    typeof response.workspace.lifecycle !== 'string' ||
+    typeof response.workspace.tombstoned !== 'boolean' ||
+    (response.workspace.provider_observed !== undefined &&
+      response.workspace.provider_observed !== null &&
+      typeof response.workspace.provider_observed !== 'string') ||
     !isRecord(response.source) ||
     !Array.isArray(response.routes) ||
     !Array.isArray(response.services) ||
