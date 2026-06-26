@@ -93,7 +93,7 @@ export class StationPtyProvider implements IPtyProvider {
     this.trackPty(appId, tracked)
     return {
       id: appId,
-      pid: parseStationPid(response.handle.process_id)
+      pid: parseStationPid(response.handle?.process_id)
     }
   }
 
@@ -510,7 +510,10 @@ export class StationPtyProvider implements IPtyProvider {
   }
 }
 
-function parseStationPid(processId: string): number | null {
+function parseStationPid(processId: unknown): number | null {
+  if (typeof processId !== 'string') {
+    return null
+  }
   if (!/^-?\d+$/.test(processId)) {
     return null
   }

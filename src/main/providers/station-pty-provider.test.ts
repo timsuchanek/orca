@@ -148,6 +148,20 @@ describe('StationPtyProvider', () => {
     expect(result.pid).toBeNull()
   })
 
+  it('returns null pid when Station create response omits handle metadata', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: trackedPty()
+    } as unknown as Awaited<ReturnType<StationClient['createPty']>>)
+
+    const result = await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(result).toEqual({
+      id: 'ssh:station%3Aws_123@@pty_123',
+      pid: null
+    })
+  })
+
   it('reattaches an existing session without creating a new PTY', async () => {
     const result = await provider.spawn({
       cols: 80,
