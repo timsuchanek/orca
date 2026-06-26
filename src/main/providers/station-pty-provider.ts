@@ -197,21 +197,20 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   async serialize(ids: string[]): Promise<string> {
-    const ptys = ids
-      .map((id) => {
-        const appId = this.tryAppPtyId(id)
-        if (appId === null) {
-          return undefined
-        }
-        if (this.terminatingPtys.has(appId)) {
-          return undefined
-        }
-        return this.trackedPtys.get(appId)
-      })
-      .filter((pty): pty is TrackedPty => pty !== undefined)
+    const ptys = new Map<string, TrackedPty>()
+    for (const id of ids) {
+      const appId = this.tryAppPtyId(id)
+      if (appId === null || this.terminatingPtys.has(appId)) {
+        continue
+      }
+      const tracked = this.trackedPtys.get(appId)
+      if (tracked) {
+        ptys.set(tracked.ptyId, tracked)
+      }
+    }
     return JSON.stringify({
       workspaceId: this.workspaceId,
-      ptys
+      ptys: Array.from(ptys.values())
     } satisfies SerializedState)
   }
 
