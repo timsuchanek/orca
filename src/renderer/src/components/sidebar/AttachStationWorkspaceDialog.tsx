@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
+import { attachStationWorkspaceToStore } from '@/station/station-workspace-attach'
 import { useAppStore } from '@/store'
-import { upsertStationWorkspaceState } from '@/store/slices/worktrees'
 import { translate } from '@/i18n/i18n'
 
 const AttachStationWorkspaceDialog = React.memo(function AttachStationWorkspaceDialog() {
@@ -62,54 +62,20 @@ const AttachStationWorkspaceDialog = React.memo(function AttachStationWorkspaceD
     const gen = ++attachGenRef.current
     setIsAttaching(true)
     try {
-      const attached = await window.api.stationWorkspace.attach({ workspaceId })
-      const currentState = useAppStore.getState()
-      const nextState = upsertStationWorkspaceState(currentState, {
+      const result = await attachStationWorkspaceToStore({
         workspaceId,
-        name: attached.name
+        activate: true,
+        openInitialTerminal: true,
+        persist: true
       })
-      useAppStore.setState({
-        repos: nextState.repos,
-        worktreesByRepo: nextState.worktreesByRepo
-      })
-
-      const activatedState = useAppStore.getState()
-      if (activatedState.activeRepoId !== nextState.repo.id) {
-        activatedState.setActiveRepo(nextState.repo.id)
-      }
-      if (activatedState.activeView !== 'terminal') {
-        activatedState.setActiveView('terminal')
-      }
-      activatedState.setActiveWorktree(nextState.worktree.id)
-
-      const beforeTabIds = new Set(
-        (useAppStore.getState().tabsByWorktree[nextState.worktree.id] ?? []).map((tab) => tab.id)
-      )
-      await useAppStore
-        .getState()
-        .openNewTerminalTabInActiveWorkspace(
-          useAppStore.getState().activeGroupIdByWorktree[nextState.worktree.id] ?? ''
-        )
-
-      const latestState = useAppStore.getState()
-      const openedTab =
-        (latestState.tabsByWorktree[nextState.worktree.id] ?? []).find(
-          (tab) => !beforeTabIds.has(tab.id)
-        ) ??
-        (latestState.tabsByWorktree[nextState.worktree.id] ?? []).at(-1) ??
-        null
-
-      if (openedTab) {
-        latestState.setTabCustomTitle(openedTab.id, nextState.worktree.displayName)
-      }
 
       if (!mountedRef.current || gen !== attachGenRef.current) {
         return
       }
 
       closeModal()
-      if (openedTab) {
-        focusTerminalTabSurface(openedTab.id)
+      if (result.openedTabId) {
+        focusTerminalTabSurface(result.openedTabId)
       }
     } catch (error) {
       if (!mountedRef.current || gen !== attachGenRef.current) {
