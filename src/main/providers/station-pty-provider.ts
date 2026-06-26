@@ -103,6 +103,9 @@ export class StationPtyProvider implements IPtyProvider {
 
   write(id: string, data: string): void {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
+    if (this.terminatingPtys.has(appId)) {
+      return
+    }
     const socket = this.sockets.get(appId)
     if (!socket || socket.readyState !== SOCKET_OPEN) {
       this.queueWriteAfterReconnect(appId, Buffer.from(data, 'utf8'))
@@ -391,7 +394,7 @@ export class StationPtyProvider implements IPtyProvider {
     const prior = this.pendingWrites.get(appId) ?? Promise.resolve()
     const next = prior
       .then(async () => {
-        if (this.disposed || !this.trackedPtys.has(appId)) {
+        if (this.disposed || !this.trackedPtys.has(appId) || this.terminatingPtys.has(appId)) {
           return
         }
         let socket = this.sockets.get(appId)
@@ -399,7 +402,7 @@ export class StationPtyProvider implements IPtyProvider {
           await this.openStream(appId)
           socket = this.sockets.get(appId)
         }
-        if (this.disposed || !this.trackedPtys.has(appId)) {
+        if (this.disposed || !this.trackedPtys.has(appId) || this.terminatingPtys.has(appId)) {
           this.sockets.get(appId)?.close()
           this.sockets.delete(appId)
           return
