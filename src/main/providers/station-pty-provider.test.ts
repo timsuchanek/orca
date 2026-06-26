@@ -420,6 +420,27 @@ describe('StationPtyProvider', () => {
     expect(client.resizePty).toHaveBeenCalledWith('ws_123', 'pty_123', 132, 55)
   })
 
+  it('redacts bearer tokens from Station resize failures', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(client.resizePty).mockRejectedValueOnce(
+      new Error('Station resize failed: Authorization: Bearer secret-token')
+    )
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    provider.resize(id, 132, 55)
+
+    await vi.waitFor(() =>
+      expect(consoleError).toHaveBeenCalledWith(
+        '[station-pty] resize failed',
+        expect.objectContaining({
+          id,
+          error: 'Station resize failed: Authorization: Bearer [REDACTED]'
+        })
+      )
+    )
+    consoleError.mockRestore()
+  })
+
   it('forwards binary data messages to Orca listeners with the app id', async () => {
     const handler = vi.fn()
     provider.onData(handler)
