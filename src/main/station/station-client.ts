@@ -157,6 +157,9 @@ export class StationClient {
     if (typeof info?.url !== 'string' || info.url.length === 0) {
       throw new Error('Station PTY stream-info response missing url')
     }
+    if (!isWebSocketUrl(info.url)) {
+      throw new Error('Station PTY stream-info response had invalid websocket url')
+    }
     if (typeof info.bearer_token !== 'string' || info.bearer_token.length === 0) {
       throw new Error('Station PTY stream-info response missing bearer_token')
     }
@@ -312,4 +315,13 @@ function redactKnownSecrets(message: string, secrets: string[]): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isWebSocketUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'ws:' || url.protocol === 'wss:'
+  } catch {
+    return false
+  }
 }

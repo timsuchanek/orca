@@ -310,6 +310,12 @@ describe('StationClient', () => {
 
   it('rejects malformed stream-info responses before opening a WebSocket', async () => {
     fetchMock.mockResolvedValueOnce(okJsonResponse({ url: '', bearer_token: '' }))
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        url: 'http://127.0.0.1:18080/v1/pty/pty_123/stream',
+        bearer_token: 'stream-secret-token'
+      })
+    )
     const client = new StationClient({
       baseUrl: 'http://127.0.0.1:18080',
       bearerToken: 'dtok_test:secret',
@@ -318,6 +324,9 @@ describe('StationClient', () => {
 
     await expect(client.openPtyStream('ws_123', 'pty_123')).rejects.toThrow(
       'Station PTY stream-info response missing url'
+    )
+    await expect(client.openPtyStream('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY stream-info response had invalid websocket url'
     )
 
     expect(FakeWebSocket.instances).toEqual([])
