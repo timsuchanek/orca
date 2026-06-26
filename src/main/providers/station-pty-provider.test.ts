@@ -811,6 +811,25 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('ignores remote exit status that resolves after provider disposal', async () => {
+    const handler = vi.fn()
+    provider.onExit(handler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const status = deferredPromise<{ pty_id: string; status: 'exited'; exit_code: number }>()
+    vi.mocked(client.getPtyStatus).mockReturnValueOnce(status.promise)
+
+    socket.emit('close')
+    await vi.waitFor(() => expect(client.getPtyStatus).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    provider.dispose()
+    status.resolve({ pty_id: 'pty_123', status: 'exited', exit_code: 17 })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(handler).not.toHaveBeenCalled()
+    expect(provider.hasPty(id)).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores stale exit status when a replacement stream is already attached', async () => {
     const handler = vi.fn()
     const dataHandler = vi.fn()
