@@ -345,12 +345,13 @@ export class StationPtyProvider implements IPtyProvider {
       socket.close()
       throw new Error('Station PTY stream open superseded')
     }
+    const decoder = new TextDecoder('utf-8')
     socket.on('message', (payload) => {
       if (this.disposed || this.sockets.get(appId) !== socket || !this.trackedPtys.has(appId)) {
         return
       }
-      const data = decodeStationMessage(payload)
-      if (data === null) {
+      const data = decodeStationMessage(payload, decoder)
+      if (data === null || data.length === 0) {
         return
       }
       this.emitData({ id: appId, data })
@@ -521,15 +522,15 @@ function parseStationPid(processId: unknown): number | null {
   return Number.isSafeInteger(pid) ? pid : null
 }
 
-function decodeStationMessage(payload: unknown): string | null {
+function decodeStationMessage(payload: unknown, decoder: TextDecoder): string | null {
   if (typeof payload === 'string') {
     return payload
   }
   if (payload instanceof Uint8Array) {
-    return Buffer.from(payload).toString('utf8')
+    return decoder.decode(payload, { stream: true })
   }
   if (payload instanceof ArrayBuffer) {
-    return Buffer.from(payload).toString('utf8')
+    return decoder.decode(payload, { stream: true })
   }
   return null
 }
