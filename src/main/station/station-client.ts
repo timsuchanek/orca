@@ -154,6 +154,12 @@ export class StationClient {
 
   async openPtyStream(workspaceId: string, ptyId: string): Promise<StationWebSocket> {
     const info = await this.getPtyStreamInfo(workspaceId, ptyId)
+    if (typeof info.url !== 'string' || info.url.length === 0) {
+      throw new Error('Station PTY stream-info response missing url')
+    }
+    if (typeof info.bearer_token !== 'string' || info.bearer_token.length === 0) {
+      throw new Error('Station PTY stream-info response missing bearer_token')
+    }
     try {
       return new this.webSocketCtor(info.url, {
         headers: { Authorization: `Bearer ${info.bearer_token}` }
