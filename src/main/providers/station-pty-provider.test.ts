@@ -441,6 +441,23 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
+  it('omits terminating Station PTYs from serialized pane state', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    const state = await provider.serialize([id])
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+
+    expect(JSON.parse(state)).toEqual({
+      workspaceId: 'ws_123',
+      ptys: []
+    })
+  })
+
   it('ignores attach while explicit terminate is in flight', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
     const closeRequest = deferredPromise<void>()
