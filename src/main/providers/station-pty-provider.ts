@@ -30,6 +30,7 @@ export class StationPtyProvider implements IPtyProvider {
   private pendingWrites = new Map<string, Promise<void>>()
   private streamOpenGenerations = new Map<string, number>()
   private terminatingPtys = new Set<string>()
+  private terminatingClosePromises = new Map<string, Promise<void>>()
   private disposed = false
 
   constructor(
@@ -137,19 +138,14 @@ export class StationPtyProvider implements IPtyProvider {
     }
 
     if (opts.immediate) {
-      if (this.terminatingPtys.has(appId)) {
-        return
+      const terminatingClose = this.terminatingClosePromises.get(appId)
+      if (terminatingClose) {
+        return terminatingClose
       }
       this.terminatingPtys.add(appId)
-      try {
-        await this.client.closePty(this.workspaceId, tracked.ptyId)
-      } catch (error) {
-        this.terminatingPtys.delete(appId)
-        throw error
-      }
-      this.detachLocalPty(appId)
-      this.emitExit({ id: appId, code: 0 })
-      return
+      const closePromise = this.closeTrackedPty(appId, tracked.ptyId)
+      this.terminatingClosePromises.set(appId, closePromise)
+      return closePromise
     }
 
     this.detachLocalPty(appId)
@@ -251,6 +247,7 @@ export class StationPtyProvider implements IPtyProvider {
     this.pendingWrites.clear()
     this.streamOpenGenerations.clear()
     this.terminatingPtys.clear()
+    this.terminatingClosePromises.clear()
     for (const socket of this.sockets.values()) {
       socket.close()
     }
@@ -279,6 +276,19 @@ export class StationPtyProvider implements IPtyProvider {
       throw new Error(`Unknown Station PTY "${appId}"`)
     }
     return tracked
+  }
+
+  private async closeTrackedPty(appId: string, ptyId: string): Promise<void> {
+    try {
+      await this.client.closePty(this.workspaceId, ptyId)
+    } catch (error) {
+      this.terminatingPtys.delete(appId)
+      throw error
+    } finally {
+      this.terminatingClosePromises.delete(appId)
+    }
+    this.detachLocalPty(appId)
+    this.emitExit({ id: appId, code: 0 })
   }
 
   private async openAndTrackPty(appId: string, tracked: TrackedPty): Promise<void> {
@@ -400,6 +410,7 @@ export class StationPtyProvider implements IPtyProvider {
     this.trackedPtys.delete(appId)
     this.streamOpenGenerations.delete(appId)
     this.terminatingPtys.delete(appId)
+    this.terminatingClosePromises.delete(appId)
     socket?.close()
   }
 

@@ -411,14 +411,34 @@ describe('StationPtyProvider', () => {
 
     const firstShutdown = provider.shutdown(id, { immediate: true })
     await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
-    await expect(provider.shutdown(id, { immediate: true })).resolves.toBeUndefined()
+    const secondShutdown = provider.shutdown(id, { immediate: true })
     closeRequest.resolve(undefined)
     await firstShutdown
+    await expect(secondShutdown).resolves.toBeUndefined()
 
     expect(client.closePty).toHaveBeenCalledTimes(1)
     expect(exitHandler).toHaveBeenCalledTimes(1)
     expect(exitHandler).toHaveBeenCalledWith({ id, code: 0 })
     expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('shares close failure with duplicate explicit terminate callers', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const firstShutdown = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    const secondShutdown = provider.shutdown(id, { immediate: true })
+    closeRequest.reject(new Error('close failed'))
+
+    await expect(firstShutdown).rejects.toThrow('close failed')
+    await expect(secondShutdown).rejects.toThrow('close failed')
+    expect(client.closePty).toHaveBeenCalledTimes(1)
+    expect(exitHandler).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
   it('ignores remote exit status that resolves after local detach', async () => {
