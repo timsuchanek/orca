@@ -141,6 +141,9 @@ jobs:
       - name: Install Electron package binary for tests
         run: node config/scripts/install-electron-package-binary.mjs
 
+      - name: Station PTY headless tests
+        run: pnpm test src/main/providers/station-pty-provider.test.ts src/main/providers/station-pty-id.test.ts src/main/station/station-client.test.ts src/main/ipc/station-workspace.test.ts -- --runInBand
+
       - name: Test
         run: pnpm test
 
