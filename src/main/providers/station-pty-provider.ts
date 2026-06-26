@@ -507,7 +507,11 @@ export class StationPtyProvider implements IPtyProvider {
         socket.send(payload)
       })
       .catch((error) => {
-        if (isStationPtyStreamOpenSupersededError(error)) {
+        if (
+          this.disposed ||
+          !this.trackedPtys.has(appId) ||
+          isStationPtyStreamOpenSupersededError(error)
+        ) {
           return
         }
         console.error('[station-pty] queued write failed', {

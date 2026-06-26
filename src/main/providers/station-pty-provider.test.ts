@@ -351,6 +351,7 @@ describe('StationPtyProvider', () => {
   })
 
   it('drops queued writes when provider is disposed before reconnect completes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
     socket.readyState = 0
     const reconnect = deferredPromise<StationWebSocket>()
@@ -365,6 +366,8 @@ describe('StationPtyProvider', () => {
 
     expect(reopenedSocket.send).not.toHaveBeenCalled()
     expect(await provider.listProcesses()).toEqual([])
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 
   it('drops queued writes quietly when a manual attach supersedes reconnect', async () => {
