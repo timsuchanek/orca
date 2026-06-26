@@ -533,7 +533,16 @@ function isStationPtyStreamOpenSupersededError(error: unknown): boolean {
 }
 
 function sanitizeStationPtyTransportError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  let message: string
+  if (error instanceof Error) {
+    message = error.message
+  } else {
+    try {
+      message = String(error)
+    } catch {
+      message = '[unprintable error]'
+    }
+  }
   return message
     .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s"'},\]]+/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
