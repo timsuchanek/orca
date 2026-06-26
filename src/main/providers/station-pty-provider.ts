@@ -137,6 +137,9 @@ export class StationPtyProvider implements IPtyProvider {
     }
 
     if (opts.immediate) {
+      if (this.terminatingPtys.has(appId)) {
+        return
+      }
       this.terminatingPtys.add(appId)
       try {
         await this.client.closePty(this.workspaceId, tracked.ptyId)

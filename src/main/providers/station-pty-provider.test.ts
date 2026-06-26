@@ -402,6 +402,25 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('deduplicates duplicate explicit terminate while remote close is pending', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const firstShutdown = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    await expect(provider.shutdown(id, { immediate: true })).resolves.toBeUndefined()
+    closeRequest.resolve(undefined)
+    await firstShutdown
+
+    expect(client.closePty).toHaveBeenCalledTimes(1)
+    expect(exitHandler).toHaveBeenCalledTimes(1)
+    expect(exitHandler).toHaveBeenCalledWith({ id, code: 0 })
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)
