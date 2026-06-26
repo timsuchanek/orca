@@ -621,6 +621,45 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('rejects malformed persisted Station PTY state before opening streams', async () => {
+    await expect(provider.revive(JSON.stringify({ workspaceId: 'ws_123', ptys: 'nope' }))).rejects.toThrow(
+      'Invalid Station PTY state'
+    )
+    await expect(
+      provider.revive(
+        JSON.stringify({
+          workspaceId: 'ws_123',
+          ptys: [{ ptyId: '', cwd: '/tmp/one', title: 'one' }]
+        })
+      )
+    ).rejects.toThrow('Invalid Station PTY state')
+
+    expect(client.openPtyStream).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('deduplicates repeated persisted Station PTY ids during revive', async () => {
+    const state = JSON.stringify({
+      workspaceId: 'ws_123',
+      ptys: [
+        { ptyId: 'pty_restore_1', cwd: '/tmp/one', title: 'one' },
+        { ptyId: 'pty_restore_1', cwd: '/tmp/duplicate', title: 'duplicate' }
+      ]
+    })
+
+    await provider.revive(state)
+
+    expect(client.openPtyStream).toHaveBeenCalledTimes(1)
+    expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_restore_1')
+    expect(await provider.listProcesses()).toEqual([
+      {
+        id: 'ssh:station%3Aws_123@@pty_restore_1',
+        cwd: '/tmp/one',
+        title: 'one'
+      }
+    ])
+  })
+
   it('closes a newly-created Station PTY when provider is disposed before spawn stream opens', async () => {
     const streamOpen = deferredPromise<StationWebSocket>()
     const openedSocket = new FakeWebSocket()

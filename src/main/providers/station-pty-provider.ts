@@ -168,15 +168,10 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   async revive(state: string): Promise<void> {
-    const parsed = JSON.parse(state) as Partial<SerializedState>
-    if (parsed.workspaceId && parsed.workspaceId !== this.workspaceId) {
-      throw new Error(
-        `Station PTY state belongs to workspace "${parsed.workspaceId}", expected "${this.workspaceId}"`
-      )
-    }
+    const parsed = parseSerializedState(state, this.workspaceId)
     const revivedAppIds: string[] = []
     try {
-      for (const entry of parsed.ptys ?? []) {
+      for (const entry of parsed.ptys) {
         const appId = this.toAppPtyId(entry.ptyId)
         await this.openAndTrackPty(appId, {
           ptyId: entry.ptyId,
@@ -425,4 +420,44 @@ function sanitizeStationPtyTransportError(error: unknown): string {
     .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s"'},\]]+/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
     .replace(/("bearer_token"\s*:\s*")[^"]*"/gi, '$1[REDACTED]"')
+}
+
+function parseSerializedState(state: string, workspaceId: string): SerializedState {
+  const parsed = JSON.parse(state) as unknown
+  if (!isRecord(parsed)) {
+    throw new Error('Invalid Station PTY state')
+  }
+  const parsedWorkspaceId = parsed.workspaceId
+  if (parsedWorkspaceId !== undefined && parsedWorkspaceId !== workspaceId) {
+    throw new Error(
+      `Station PTY state belongs to workspace "${String(parsedWorkspaceId)}", expected "${workspaceId}"`
+    )
+  }
+  const rawPtys = parsed.ptys
+  if (rawPtys === undefined) {
+    return { workspaceId, ptys: [] }
+  }
+  if (!Array.isArray(rawPtys)) {
+    throw new Error('Invalid Station PTY state')
+  }
+
+  const ptys = new Map<string, TrackedPty>()
+  for (const entry of rawPtys) {
+    if (!isRecord(entry) || typeof entry.ptyId !== 'string' || entry.ptyId.length === 0) {
+      throw new Error('Invalid Station PTY state')
+    }
+    if (!ptys.has(entry.ptyId)) {
+      ptys.set(entry.ptyId, {
+        ptyId: entry.ptyId,
+        cwd: typeof entry.cwd === 'string' && entry.cwd.length > 0 ? entry.cwd : DEFAULT_CWD,
+        title: typeof entry.title === 'string' && entry.title.length > 0 ? entry.title : 'orca-shell'
+      })
+    }
+  }
+
+  return { workspaceId, ptys: Array.from(ptys.values()) }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
