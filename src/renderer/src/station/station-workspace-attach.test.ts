@@ -130,6 +130,54 @@ describe('attachStationWorkspaceToStore', () => {
     expect(openNewTerminalTabInActiveWorkspace).not.toHaveBeenCalled()
   })
 
+  it('rejects opening an initial terminal without activating the workspace', async () => {
+    const setActiveRepo = vi.fn()
+    const setActiveView = vi.fn()
+    const setActiveWorktree = vi.fn()
+    const openNewTerminalTabInActiveWorkspace = vi.fn()
+    const attach = vi.fn()
+
+    mocks.getState.mockReturnValue({
+      repos: [],
+      worktreesByRepo: {},
+      tabsByWorktree: {},
+      activeGroupIdByWorktree: {},
+      activeRepoId: 'other-repo',
+      activeWorktreeId: 'other-worktree',
+      activeView: 'home',
+      setActiveRepo,
+      setActiveView,
+      setActiveWorktree,
+      openNewTerminalTabInActiveWorkspace
+    })
+
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          attach,
+          save: vi.fn()
+        }
+      }
+    })
+
+    await expect(
+      attachStationWorkspaceToStore({
+        workspaceId: 'ws_invalid',
+        activate: false,
+        openInitialTerminal: true,
+        persist: false
+      })
+    ).rejects.toThrow(
+      'attachStationWorkspaceToStore requires activate=true when openInitialTerminal=true'
+    )
+
+    expect(attach).not.toHaveBeenCalled()
+    expect(setActiveRepo).not.toHaveBeenCalled()
+    expect(setActiveView).not.toHaveBeenCalled()
+    expect(setActiveWorktree).not.toHaveBeenCalled()
+    expect(openNewTerminalTabInActiveWorkspace).not.toHaveBeenCalled()
+  })
+
   it('opens one terminal, activates the workspace, and returns the diffed tab id', async () => {
     const setActiveRepo = vi.fn()
     const setActiveView = vi.fn()

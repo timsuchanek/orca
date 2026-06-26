@@ -41,6 +41,12 @@ export async function attachStationWorkspaceToStore(args: {
   worktreeId: string
   openedTabId: string | null
 }> {
+  if (args.openInitialTerminal && !args.activate) {
+    throw new Error(
+      'attachStationWorkspaceToStore requires activate=true when openInitialTerminal=true'
+    )
+  }
+
   const workspaceId = args.workspaceId.trim()
   const attached = await window.api.stationWorkspace.attach({ workspaceId })
 
