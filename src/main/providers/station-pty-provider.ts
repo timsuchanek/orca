@@ -131,7 +131,10 @@ export class StationPtyProvider implements IPtyProvider {
 
   async shutdown(id: string, opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
-    const tracked = this.requireTrackedPty(appId)
+    const tracked = this.trackedPtys.get(appId)
+    if (!tracked) {
+      return
+    }
 
     if (opts.immediate) {
       this.terminatingPtys.add(appId)

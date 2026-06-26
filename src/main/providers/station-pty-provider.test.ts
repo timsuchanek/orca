@@ -389,6 +389,19 @@ describe('StationPtyProvider', () => {
     expect(client.resizePty).not.toHaveBeenCalled()
   })
 
+  it('treats duplicate local detach as a no-op', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    await provider.shutdown(id, { immediate: false })
+    await expect(provider.shutdown(id, { immediate: false })).resolves.toBeUndefined()
+
+    expect(client.closePty).not.toHaveBeenCalled()
+    expect(exitHandler).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)
