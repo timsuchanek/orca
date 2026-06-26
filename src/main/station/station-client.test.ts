@@ -223,6 +223,23 @@ describe('StationClient', () => {
     expect(FakeWebSocket.instances).toEqual([])
   })
 
+  it('throws a Station-specific error for invalid JSON responses', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('{not-json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    const client = new StationClient({
+      baseUrl: 'http://127.0.0.1:18080',
+      bearerToken: 'dtok_test:secret'
+    })
+
+    await expect(client.inspectWorkspace('ws_123')).rejects.toThrow(
+      'Station response was not valid JSON'
+    )
+  })
+
   it('throws sanitized non-2xx response errors with the status code', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(

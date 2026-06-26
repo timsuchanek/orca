@@ -175,7 +175,11 @@ export class StationClient {
 
   private async requestJson<T>(method: string, path: string, body?: unknown): Promise<T> {
     const response = await this.request(method, path, body)
-    return (await response.json()) as T
+    try {
+      return (await response.json()) as T
+    } catch {
+      throw new Error('Station response was not valid JSON')
+    }
   }
 
   private async request(method: string, path: string, body?: unknown): Promise<Response> {
