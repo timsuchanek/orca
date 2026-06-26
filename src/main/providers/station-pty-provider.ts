@@ -416,13 +416,27 @@ export class StationPtyProvider implements IPtyProvider {
 
   private emitData(payload: { id: string; data: string }): void {
     for (const callback of this.dataListeners) {
-      callback(payload)
+      try {
+        callback(payload)
+      } catch (error) {
+        console.error('[station-pty] data listener failed', {
+          id: payload.id,
+          error: sanitizeStationPtyTransportError(error)
+        })
+      }
     }
   }
 
   private emitExit(payload: { id: string; code: number }): void {
     for (const callback of this.exitListeners) {
-      callback(payload)
+      try {
+        callback(payload)
+      } catch (error) {
+        console.error('[station-pty] exit listener failed', {
+          id: payload.id,
+          error: sanitizeStationPtyTransportError(error)
+        })
+      }
     }
   }
 

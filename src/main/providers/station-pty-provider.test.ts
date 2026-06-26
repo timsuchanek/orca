@@ -365,6 +365,27 @@ describe('StationPtyProvider', () => {
     expect(handler).toHaveBeenCalledWith({ id, data: 'hello from station' })
   })
 
+  it('keeps forwarding Station output when one data listener throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const throwingHandler = vi.fn(() => {
+      throw new Error('listener failed')
+    })
+    const receivingHandler = vi.fn()
+    provider.onData(throwingHandler)
+    provider.onData(receivingHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(() => socket.emit('message', Buffer.from('hello from station', 'utf8'), true)).not.toThrow()
+
+    expect(throwingHandler).toHaveBeenCalledWith({ id, data: 'hello from station' })
+    expect(receivingHandler).toHaveBeenCalledWith({ id, data: 'hello from station' })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[station-pty] data listener failed',
+      expect.objectContaining({ id, error: 'listener failed' })
+    )
+    consoleError.mockRestore()
+  })
+
   it('stops forwarding Station output after a data listener unsubscribes', async () => {
     const handler = vi.fn()
     const unsubscribe = provider.onData(handler)
@@ -427,6 +448,32 @@ describe('StationPtyProvider', () => {
     await vi.waitFor(() => expect(handler).toHaveBeenCalledWith({ id, code: 17 }))
 
     expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('keeps forwarding Station exits when one exit listener throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const throwingHandler = vi.fn(() => {
+      throw new Error('exit listener failed')
+    })
+    const receivingHandler = vi.fn()
+    provider.onExit(throwingHandler)
+    provider.onExit(receivingHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    vi.mocked(client.getPtyStatus).mockResolvedValueOnce({
+      pty_id: 'pty_123',
+      status: 'exited',
+      exit_code: 17
+    })
+
+    socket.emit('close')
+
+    await vi.waitFor(() => expect(receivingHandler).toHaveBeenCalledWith({ id, code: 17 }))
+    expect(throwingHandler).toHaveBeenCalledWith({ id, code: 17 })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[station-pty] exit listener failed',
+      expect.objectContaining({ id, error: 'exit listener failed' })
+    )
+    consoleError.mockRestore()
   })
 
   it('emits one exit when explicit terminate races with stream-close status', async () => {
