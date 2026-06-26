@@ -171,6 +171,8 @@ describe('StationClient', () => {
 
   it('rejects malformed PTY status responses', async () => {
     fetchMock.mockResolvedValueOnce(okJsonResponse({ pty_id: 'pty_123', status: 'sleeping' }))
+    fetchMock.mockResolvedValueOnce(okJsonResponse(null))
+    fetchMock.mockResolvedValueOnce(okJsonResponse({ status: 'running' }))
     const client = new StationClient({
       baseUrl: 'http://127.0.0.1:18080',
       bearerToken: 'dtok_test:secret'
@@ -178,6 +180,12 @@ describe('StationClient', () => {
 
     await expect(client.getPtyStatus('ws_123', 'pty_123')).rejects.toThrow(
       'Station PTY status response had invalid status'
+    )
+    await expect(client.getPtyStatus('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY status response was invalid'
+    )
+    await expect(client.getPtyStatus('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY status response was invalid'
     )
   })
 

@@ -240,6 +240,9 @@ function stationErrorMessage(error: unknown): string {
 }
 
 function validatePtyStatusResponse(response: StationPtyStatusResponse): StationPtyStatusResponse {
+  if (!isRecord(response) || typeof response.pty_id !== 'string' || response.pty_id.length === 0) {
+    throw new Error('Station PTY status response was invalid')
+  }
   if (!['running', 'exited', 'missing'].includes(response.status)) {
     throw new Error('Station PTY status response had invalid status')
   }
@@ -267,4 +270,8 @@ function redactKnownSecrets(message: string, secrets: string[]): string {
     sanitized = sanitized.split(secret).join('[REDACTED]')
   }
   return sanitized
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
