@@ -368,6 +368,10 @@ export class StationPtyProvider implements IPtyProvider {
     })
     socket.on('close', () => {
       if (this.sockets.get(appId) === socket) {
+        const data = decoder.decode()
+        if (!this.disposed && this.trackedPtys.has(appId) && data.length > 0) {
+          this.emitData({ id: appId, data })
+        }
         this.sockets.delete(appId)
         void this.emitExitIfRemotePtyStopped(appId, tracked.ptyId)
       }
