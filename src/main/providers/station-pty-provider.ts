@@ -29,6 +29,7 @@ export class StationPtyProvider implements IPtyProvider {
   private trackedPtys = new Map<string, TrackedPty>()
   private pendingWrites = new Map<string, Promise<void>>()
   private streamOpenGenerations = new Map<string, number>()
+  private terminatingPtys = new Set<string>()
   private disposed = false
 
   constructor(
@@ -123,7 +124,13 @@ export class StationPtyProvider implements IPtyProvider {
     const tracked = this.requireTrackedPty(appId)
 
     if (opts.immediate) {
-      await this.client.closePty(this.workspaceId, tracked.ptyId)
+      this.terminatingPtys.add(appId)
+      try {
+        await this.client.closePty(this.workspaceId, tracked.ptyId)
+      } catch (error) {
+        this.terminatingPtys.delete(appId)
+        throw error
+      }
       this.detachLocalPty(appId)
       this.emitExit({ id: appId, code: 0 })
       return
@@ -227,6 +234,7 @@ export class StationPtyProvider implements IPtyProvider {
     this.disposed = true
     this.pendingWrites.clear()
     this.streamOpenGenerations.clear()
+    this.terminatingPtys.clear()
     for (const socket of this.sockets.values()) {
       socket.close()
     }
@@ -315,7 +323,12 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   private async emitExitIfRemotePtyStopped(appId: string, ptyId: string): Promise<void> {
-    if (this.disposed || !this.trackedPtys.has(appId) || this.sockets.has(appId)) {
+    if (
+      this.disposed ||
+      !this.trackedPtys.has(appId) ||
+      this.sockets.has(appId) ||
+      this.terminatingPtys.has(appId)
+    ) {
       return
     }
     let status: Awaited<ReturnType<StationClient['getPtyStatus']>>
@@ -328,7 +341,12 @@ export class StationPtyProvider implements IPtyProvider {
       })
       return
     }
-    if (this.disposed || !this.trackedPtys.has(appId) || this.sockets.has(appId)) {
+    if (
+      this.disposed ||
+      !this.trackedPtys.has(appId) ||
+      this.sockets.has(appId) ||
+      this.terminatingPtys.has(appId)
+    ) {
       return
     }
     if (status.status !== 'exited' && status.status !== 'missing') {
@@ -365,6 +383,7 @@ export class StationPtyProvider implements IPtyProvider {
     this.sockets.delete(appId)
     this.trackedPtys.delete(appId)
     this.streamOpenGenerations.delete(appId)
+    this.terminatingPtys.delete(appId)
     socket?.close()
   }
 

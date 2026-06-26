@@ -327,6 +327,30 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('emits one exit when explicit terminate races with stream-close status', async () => {
+    const handler = vi.fn()
+    provider.onExit(handler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    const status = deferredPromise<{ pty_id: string; status: 'exited'; exit_code: number }>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+    vi.mocked(client.getPtyStatus).mockReturnValueOnce(status.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    socket.emit('close')
+    expect(client.getPtyStatus).not.toHaveBeenCalled()
+    status.resolve({ pty_id: 'pty_123', status: 'exited', exit_code: 17 })
+    await Promise.resolve()
+    await Promise.resolve()
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledWith({ id, code: 0 })
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)
