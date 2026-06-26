@@ -3556,6 +3556,14 @@ export type LegacyPaneKeyAliasEntry = {
   updatedAt: number
 }
 
+export type StationWorkspaceRecord = {
+  workspaceId: string
+  name: string
+  repositoryDisplay?: string | null
+  addedAt: number
+  updatedAt: number
+}
+
 // ─── Persistence shape ──────────────────────────────────────────────
 export type PersistedState = {
   schemaVersion: number
@@ -3576,6 +3584,7 @@ export type PersistedState = {
     pr: Record<string, { data: PRInfo | null; fetchedAt: number }>
     issue: Record<string, { data: IssueInfo | null; fetchedAt: number }>
   }
+  stationWorkspaces?: StationWorkspaceRecord[]
   /** Legacy single-blob session. Retained as the canonical 'local' execution
    *  host partition so an app downgrade still reads its workspace. Non-local
    *  hosts live in workspaceSessionsByHostId, keyed by ExecutionHostId. */

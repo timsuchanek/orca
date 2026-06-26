@@ -9831,6 +9831,94 @@ describe('Store host-partitioned workspace sessions', () => {
     // Bad partition collapses to defaults rather than poisoning the map.
     expect(store.getWorkspaceSession('runtime:bad').activeRepoId).toBeNull()
   })
+
+  it('upsertStationWorkspace creates one persisted record', async () => {
+    const store = await createStore()
+    const record = {
+      workspaceId: 'station-workspace-1',
+      name: 'Alpha',
+      repositoryDisplay: 'acme/alpha',
+      addedAt: 100,
+      updatedAt: 100
+    }
+
+    expect(store.getStationWorkspaces()).toEqual([])
+    expect(store.upsertStationWorkspace(record)).toEqual(record)
+    expect(store.getStationWorkspaces()).toEqual([record])
+  })
+
+  it('upsertStationWorkspace refreshes mutable fields without duplicating the durable record', async () => {
+    const store = await createStore()
+
+    store.upsertStationWorkspace({
+      workspaceId: 'station-workspace-1',
+      name: 'Alpha',
+      repositoryDisplay: null,
+      addedAt: 100,
+      updatedAt: 100
+    })
+
+    const updated = store.upsertStationWorkspace({
+      workspaceId: 'station-workspace-1',
+      name: 'Beta',
+      repositoryDisplay: 'acme/beta',
+      addedAt: 200,
+      updatedAt: 300
+    })
+
+    expect(updated).toEqual({
+      workspaceId: 'station-workspace-1',
+      name: 'Beta',
+      repositoryDisplay: 'acme/beta',
+      addedAt: 100,
+      updatedAt: 300
+    })
+    expect(store.getStationWorkspaces()).toEqual([updated])
+  })
+
+  it('keeps station workspace records across store reloads', async () => {
+    const store = await createStore()
+    const record = {
+      workspaceId: 'station-workspace-1',
+      name: 'Alpha',
+      repositoryDisplay: 'acme/alpha',
+      addedAt: 100,
+      updatedAt: 100
+    }
+
+    store.upsertStationWorkspace(record)
+    store.flush()
+
+    const reloaded = await createStore()
+
+    expect(reloaded.getStationWorkspaces()).toEqual([record])
+  })
+
+  it('removeStationWorkspace deletes one record and stays idempotent', async () => {
+    const store = await createStore()
+    const first = {
+      workspaceId: 'station-workspace-1',
+      name: 'Alpha',
+      repositoryDisplay: 'acme/alpha',
+      addedAt: 100,
+      updatedAt: 100
+    }
+    const second = {
+      workspaceId: 'station-workspace-2',
+      name: 'Beta',
+      repositoryDisplay: null,
+      addedAt: 200,
+      updatedAt: 200
+    }
+
+    store.upsertStationWorkspace(first)
+    store.upsertStationWorkspace(second)
+
+    expect(store.removeStationWorkspace('station-workspace-1')).toBe(true)
+    expect(store.getStationWorkspaces()).toEqual([second])
+    expect(store.removeStationWorkspace('station-workspace-1')).toBe(false)
+    expect(store.getStationWorkspaces()).toEqual([second])
+  })
 })
 
 describe('Store native-chat tab viewMode persistence', () => {

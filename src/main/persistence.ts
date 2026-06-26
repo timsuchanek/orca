@@ -49,6 +49,7 @@ import type {
   Repo,
   ProjectGroup,
   FolderWorkspace,
+  StationWorkspaceRecord,
   SparsePreset,
   WorktreeMeta,
   WorktreeLineage,
@@ -3103,6 +3104,7 @@ export class Store {
         result = {
           ...defaults,
           ...parsed,
+          stationWorkspaces: parsed.stationWorkspaces ?? [],
           featureInteractionTelemetryBuckets: normalizeFeatureInteractionTelemetryBuckets(
             parsed.featureInteractionTelemetryBuckets
           ),
@@ -5595,6 +5597,43 @@ export class Store {
     // durable state file once per poll cycle for refetchable data.
     this.state.githubCache = cache
     this.githubCacheDirty = true
+  }
+
+  // ── Station Workspaces ────────────────────────────────────────────
+
+  getStationWorkspaces(): StationWorkspaceRecord[] {
+    return [...(this.state.stationWorkspaces ?? [])]
+  }
+
+  upsertStationWorkspace(record: StationWorkspaceRecord): StationWorkspaceRecord {
+    this.state.stationWorkspaces ??= []
+    const existingIndex = this.state.stationWorkspaces.findIndex(
+      (entry) => entry.workspaceId === record.workspaceId
+    )
+    const existing = existingIndex >= 0 ? this.state.stationWorkspaces[existingIndex] : undefined
+    const next: StationWorkspaceRecord = {
+      ...record,
+      addedAt: existing?.addedAt ?? record.addedAt
+    }
+    if (existingIndex >= 0) {
+      this.state.stationWorkspaces[existingIndex] = next
+    } else {
+      this.state.stationWorkspaces.push(next)
+    }
+    this.scheduleSave()
+    return next
+  }
+
+  removeStationWorkspace(workspaceId: string): boolean {
+    const before = this.state.stationWorkspaces?.length ?? 0
+    this.state.stationWorkspaces = (this.state.stationWorkspaces ?? []).filter(
+      (record) => record.workspaceId !== workspaceId
+    )
+    if ((this.state.stationWorkspaces?.length ?? 0) === before) {
+      return false
+    }
+    this.scheduleSave()
+    return true
   }
 
   // ── Workspace Session ─────────────────────────────────────────────
