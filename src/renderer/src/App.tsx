@@ -1094,8 +1094,11 @@ function App(): React.JSX.Element {
             logRendererStartupDiagnostic('ssh-reconnect-skipped', { connectionIds: 0 })
           }
 
-          reconnectStarted = true
-          await restorePersistedStationWorkspaceTerminals(abortController.signal)
+          await restorePersistedStationWorkspaceTerminals(abortController.signal, {
+            onBeforeReconnect: () => {
+              reconnectStarted = true
+            }
+          })
           syncZoomCSSVar()
           // Why (issue #1158): unlock the debounced session writer only after
           // hydration AND all dependent startup steps (SSH reconnect, terminal

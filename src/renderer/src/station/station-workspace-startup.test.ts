@@ -4,8 +4,18 @@ const attachStateMocks = vi.hoisted(() => ({
   upsertStationWorkspaceIntoRendererState: vi.fn()
 }))
 
+const storeMocks = vi.hoisted(() => ({
+  getState: vi.fn()
+}))
+
 vi.mock('./station-workspace-attach', () => ({
   upsertStationWorkspaceIntoRendererState: attachStateMocks.upsertStationWorkspaceIntoRendererState
+}))
+
+vi.mock('@/store', () => ({
+  useAppStore: {
+    getState: storeMocks.getState
+  }
 }))
 
 describe('rehydratePersistedStationWorkspaces', () => {
@@ -193,5 +203,72 @@ describe('rehydratePersistedStationWorkspaces', () => {
 
     expect(attachStateMocks.upsertStationWorkspaceIntoRendererState).not.toHaveBeenCalled()
     expect(attach).not.toHaveBeenCalled()
+  })
+
+  it('marks reconnect as started only immediately before reconnectPersistedTerminals runs', async () => {
+    const reconnectPersistedTerminals = vi.fn().mockResolvedValue(undefined)
+    const onBeforeReconnect = vi.fn()
+
+    storeMocks.getState.mockReturnValue({
+      reconnectPersistedTerminals
+    })
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          list: vi.fn().mockResolvedValue([]),
+          attach: vi.fn(),
+          save: vi.fn(),
+          remove: vi.fn(),
+          detach: vi.fn()
+        },
+        app: {
+          awaitFirstWindowStartupServices: vi.fn().mockResolvedValue(undefined)
+        }
+      }
+    })
+
+    const moduleUnderTest = await import('./station-workspace-startup')
+
+    await expect(
+      moduleUnderTest.restorePersistedStationWorkspaceTerminals(undefined, { onBeforeReconnect })
+    ).resolves.toBeUndefined()
+
+    expect(onBeforeReconnect).toHaveBeenCalledTimes(1)
+    expect(reconnectPersistedTerminals).toHaveBeenCalledTimes(1)
+    expect(onBeforeReconnect.mock.invocationCallOrder[0]).toBeLessThan(
+      reconnectPersistedTerminals.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('does not mark reconnect as started when startup services fail before reconnect begins', async () => {
+    const reconnectPersistedTerminals = vi.fn().mockResolvedValue(undefined)
+    const onBeforeReconnect = vi.fn()
+
+    storeMocks.getState.mockReturnValue({
+      reconnectPersistedTerminals
+    })
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          list: vi.fn().mockResolvedValue([]),
+          attach: vi.fn(),
+          save: vi.fn(),
+          remove: vi.fn(),
+          detach: vi.fn()
+        },
+        app: {
+          awaitFirstWindowStartupServices: vi.fn().mockRejectedValue(new Error('services failed'))
+        }
+      }
+    })
+
+    const moduleUnderTest = await import('./station-workspace-startup')
+
+    await expect(
+      moduleUnderTest.restorePersistedStationWorkspaceTerminals(undefined, { onBeforeReconnect })
+    ).rejects.toThrow('services failed')
+
+    expect(onBeforeReconnect).not.toHaveBeenCalled()
+    expect(reconnectPersistedTerminals).not.toHaveBeenCalled()
   })
 })

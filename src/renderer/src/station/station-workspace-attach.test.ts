@@ -182,6 +182,7 @@ describe('attachStationWorkspaceToStore', () => {
     const setActiveRepo = vi.fn()
     const setActiveView = vi.fn()
     const setActiveWorktree = vi.fn()
+    const setTabCustomTitle = vi.fn()
     const openNewTerminalTabInActiveWorkspace = vi.fn(async () => {
       state.tabsByWorktree['station://workspace/ws_opened'] = [
         { id: 'existing-tab' },
@@ -204,6 +205,7 @@ describe('attachStationWorkspaceToStore', () => {
       setActiveRepo,
       setActiveView,
       setActiveWorktree,
+      setTabCustomTitle,
       openNewTerminalTabInActiveWorkspace
     }
 
@@ -243,6 +245,7 @@ describe('attachStationWorkspaceToStore', () => {
     expect(setActiveWorktree).toHaveBeenCalledWith('station://workspace/ws_opened')
     expect(openNewTerminalTabInActiveWorkspace).toHaveBeenCalledTimes(1)
     expect(openNewTerminalTabInActiveWorkspace).toHaveBeenCalledWith('group-1')
+    expect(setTabCustomTitle).toHaveBeenCalledWith('opened-tab', 'Opened Workspace')
   })
 
   it('persists the attached workspace metadata when requested', async () => {

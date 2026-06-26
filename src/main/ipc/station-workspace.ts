@@ -39,6 +39,7 @@ type ActiveStationWorkspace = {
 
 const activeStationWorkspaces = new Map<string, ActiveStationWorkspace>()
 const stationProviderStartupByConnectionId = new Map<string, Promise<void>>()
+const stationWorkspaceAttachInFlight = new Map<string, Promise<StationWorkspaceAttachResult>>()
 
 function createDeferredPromise(): {
   promise: Promise<void>
@@ -125,67 +126,86 @@ export function registerStationWorkspaceHandlers(
   ipcMain.handle('stationWorkspace:attach', async (_event, rawArgs: unknown) => {
     const { workspaceId } = parseWorkspaceArgs(rawArgs)
     const connectionId = stationConnectionId(workspaceId)
+    const attachKey = `${workspaceId}:${connectionId}`
     const existing = activeStationWorkspaces.get(workspaceId)
     if (existing) {
       registerSshPtyProvider(existing.connectionId, existing.provider)
       return existing.metadata
     }
-    const startupDeferred = createDeferredPromise()
-    stationProviderStartupByConnectionId.set(connectionId, startupDeferred.promise)
+    const inFlight = stationWorkspaceAttachInFlight.get(attachKey)
+    if (inFlight) {
+      return inFlight
+    }
 
-    let knownSecrets: string[] = []
-    try {
-      const credentials = loadStationCredentials()
-      const bearerToken = stationBearerToken(credentials)
-      knownSecrets = [bearerToken, credentials.deviceTokenId, credentials.deviceTokenSecret]
+    const attachPromise = (async (): Promise<StationWorkspaceAttachResult> => {
+      const startupDeferred = createDeferredPromise()
+      stationProviderStartupByConnectionId.set(connectionId, startupDeferred.promise)
 
-      const client = new StationClient({
-        baseUrl: credentials.apiBaseUrl,
-        bearerToken
-      })
-      const inspected = await client.inspectWorkspace(workspaceId)
-      const lifecycle = inspected.workspace.lifecycle.trim().toLowerCase()
-      if (inspected.workspace.tombstoned || lifecycle === 'destroyed') {
-        throw new Error(`Station workspace "${workspaceId}" workspace is destroyed`)
-      }
-      const providerObserved = inspected.workspace.provider_observed?.trim().toLowerCase()
-      if (providerObserved === 'missing' || providerObserved === 'dead') {
-        throw new Error(`Station workspace "${workspaceId}" provider is ${providerObserved}`)
-      }
+      let knownSecrets: string[] = []
+      try {
+        const credentials = loadStationCredentials()
+        const bearerToken = stationBearerToken(credentials)
+        knownSecrets = [bearerToken, credentials.deviceTokenId, credentials.deviceTokenSecret]
 
-      if (!isStationConnectionId(connectionId)) {
-        throw new Error(`Invalid Station connection id for workspace "${workspaceId}"`)
-      }
-
-      const provider = new StationPtyProvider(connectionId, workspaceId, client)
-      registerSshPtyProvider(connectionId, provider)
-
-      const metadata: StationWorkspaceAttachResult = {
-        connectionId,
-        workspaceId,
-        name: inspected.workspace.name,
-        repositoryDisplay:
-          inspected.workspace.repository_display ?? inspected.source.source?.repository_display ?? null,
-        cwd: STATION_WORKSPACE_CWD
-      }
-      activeStationWorkspaces.set(workspaceId, {
-        connectionId,
-        provider,
-        metadata,
-        unsubscribeEvents: wireStationPtyEvents({
-          provider,
-          mainWindow,
-          runtime
+        const client = new StationClient({
+          baseUrl: credentials.apiBaseUrl,
+          bearerToken
         })
-      })
-      startupDeferred.resolve()
-      return metadata
-    } catch (error) {
-      startupDeferred.reject(error)
-      throw sanitizeStationAttachError(error, knownSecrets)
+        const inspected = await client.inspectWorkspace(workspaceId)
+        const lifecycle = inspected.workspace.lifecycle.trim().toLowerCase()
+        if (inspected.workspace.tombstoned || lifecycle === 'destroyed') {
+          throw new Error(`Station workspace "${workspaceId}" workspace is destroyed`)
+        }
+        const providerObserved = inspected.workspace.provider_observed?.trim().toLowerCase()
+        if (providerObserved === 'missing' || providerObserved === 'dead') {
+          throw new Error(`Station workspace "${workspaceId}" provider is ${providerObserved}`)
+        }
+
+        if (!isStationConnectionId(connectionId)) {
+          throw new Error(`Invalid Station connection id for workspace "${workspaceId}"`)
+        }
+
+        const provider = new StationPtyProvider(connectionId, workspaceId, client)
+        registerSshPtyProvider(connectionId, provider)
+
+        const metadata: StationWorkspaceAttachResult = {
+          connectionId,
+          workspaceId,
+          name: inspected.workspace.name,
+          repositoryDisplay:
+            inspected.workspace.repository_display ??
+            inspected.source.source?.repository_display ??
+            null,
+          cwd: STATION_WORKSPACE_CWD
+        }
+        activeStationWorkspaces.set(workspaceId, {
+          connectionId,
+          provider,
+          metadata,
+          unsubscribeEvents: wireStationPtyEvents({
+            provider,
+            mainWindow,
+            runtime
+          })
+        })
+        startupDeferred.resolve()
+        return metadata
+      } catch (error) {
+        startupDeferred.reject(error)
+        throw sanitizeStationAttachError(error, knownSecrets)
+      } finally {
+        if (stationProviderStartupByConnectionId.get(connectionId) === startupDeferred.promise) {
+          stationProviderStartupByConnectionId.delete(connectionId)
+        }
+      }
+    })()
+
+    stationWorkspaceAttachInFlight.set(attachKey, attachPromise)
+    try {
+      return await attachPromise
     } finally {
-      if (stationProviderStartupByConnectionId.get(connectionId) === startupDeferred.promise) {
-        stationProviderStartupByConnectionId.delete(connectionId)
+      if (stationWorkspaceAttachInFlight.get(attachKey) === attachPromise) {
+        stationWorkspaceAttachInFlight.delete(attachKey)
       }
     }
   })
@@ -248,6 +268,7 @@ export function resetStationWorkspaceHandlersForTests(): void {
   }
   activeStationWorkspaces.clear()
   stationProviderStartupByConnectionId.clear()
+  stationWorkspaceAttachInFlight.clear()
 }
 
 function parseWorkspaceArgs(value: unknown): { workspaceId: string } {

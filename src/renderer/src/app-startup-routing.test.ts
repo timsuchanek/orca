@@ -79,7 +79,7 @@ describe('renderer startup runtime routing', () => {
       'utf8'
     )
     const helperCallIndex = appSource.indexOf(
-      'await restorePersistedStationWorkspaceTerminals(abortController.signal)'
+      'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
     )
     const hydrationSucceededIndex = appSource.indexOf('actions.setHydrationSucceeded(true)')
     const stationRehydrateIndex = startupSource.indexOf('await rehydratePersistedStationWorkspaces()')
@@ -91,6 +91,26 @@ describe('renderer startup runtime routing', () => {
     expect(stationRehydrateIndex).toBeGreaterThanOrEqual(0)
     expect(stationRehydrateIndex).toBeLessThan(servicesIndex)
     expect(servicesIndex).toBeLessThan(reconnectIndex)
+  })
+
+  it('marks reconnectStarted at the actual reconnect boundary for persisted Station startup restore', () => {
+    const appSource = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
+
+    expect(appSource).toContain(
+      'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
+    )
+    expect(appSource).toContain('onBeforeReconnect: () => {')
+    expect(appSource).toContain('reconnectStarted = true')
+
+    const helperCallIndex = appSource.indexOf(
+      'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
+    )
+    const reconnectStartedIndex = appSource.indexOf('reconnectStarted = true', helperCallIndex)
+    const hydrationSucceededIndex = appSource.indexOf('actions.setHydrationSucceeded(true)', helperCallIndex)
+
+    expect(helperCallIndex).toBeGreaterThanOrEqual(0)
+    expect(reconnectStartedIndex).toBeGreaterThan(helperCallIndex)
+    expect(hydrationSucceededIndex).toBeGreaterThan(reconnectStartedIndex)
   })
 
   it('does not eagerly import the floating terminal panel on startup', () => {

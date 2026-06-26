@@ -279,6 +279,41 @@ describe('registerStationWorkspaceHandlers', () => {
     })
   })
 
+  it('deduplicates concurrent attach calls for the same Station workspace while attach is in flight', async () => {
+    let resolveInspect!: (value: ReturnType<typeof inspectResponse>) => void
+    inspectWorkspaceMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInspect = resolve
+        })
+    )
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    const firstAttach = handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+    const secondAttach = handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+
+    expect(inspectWorkspaceMock).toHaveBeenCalledTimes(1)
+    expect(stationProviderInstances).toHaveLength(0)
+
+    resolveInspect(inspectResponse())
+    const [firstResult, secondResult] = await Promise.all([firstAttach, secondAttach])
+
+    expect(firstResult).toBe(secondResult)
+    expect(firstResult).toEqual({
+      connectionId: stationConnectionId('ws_123'),
+      workspaceId: 'ws_123',
+      name: 'expand-runtime',
+      repositoryDisplay: 'github.com/expandai/expand',
+      cwd: '/home/station/workspace'
+    })
+    expect(stationProviderInstances).toHaveLength(1)
+    expect(registerSshPtyProviderMock).toHaveBeenCalledTimes(1)
+    expect(registerSshPtyProviderMock).toHaveBeenCalledWith(
+      stationConnectionId('ws_123'),
+      expect.anything()
+    )
+  })
+
   it('trims pasted Station workspace ids before attaching', async () => {
     registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 

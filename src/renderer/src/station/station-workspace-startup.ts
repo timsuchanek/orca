@@ -66,9 +66,13 @@ export async function rehydratePersistedStationWorkspaces(): Promise<{
 }
 
 export async function restorePersistedStationWorkspaceTerminals(
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: {
+    onBeforeReconnect?: () => void
+  }
 ): Promise<void> {
   await rehydratePersistedStationWorkspaces()
   await window.api.app.awaitFirstWindowStartupServices()
+  options?.onBeforeReconnect?.()
   await useAppStore.getState().reconnectPersistedTerminals(signal)
 }

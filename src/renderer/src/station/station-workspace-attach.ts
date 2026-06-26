@@ -58,7 +58,7 @@ export async function attachStationWorkspaceToStore(args: {
     })
   }
 
-  const { repoId, worktreeId } = upsertStationWorkspaceIntoRendererState({
+  const { repoId, worktreeId, displayName } = upsertStationWorkspaceIntoRendererState({
     workspaceId,
     name: attached.name
   })
@@ -89,6 +89,9 @@ export async function attachStationWorkspaceToStore(args: {
     .openNewTerminalTabInActiveWorkspace(useAppStore.getState().activeGroupIdByWorktree[worktreeId] ?? '')
   const afterTabs = useAppStore.getState().tabsByWorktree[worktreeId] ?? []
   const openedTabId = afterTabs.find((tab) => !beforeTabIds.has(tab.id))?.id ?? null
+  if (openedTabId) {
+    useAppStore.getState().setTabCustomTitle(openedTabId, displayName)
+  }
 
   return {
     workspaceId,
