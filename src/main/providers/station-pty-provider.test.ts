@@ -233,7 +233,7 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
-  it('shutdown closes only the tracked PTY and emits exit for that PTY', async () => {
+  it('immediate shutdown closes only the tracked PTY and emits exit for that PTY', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
     const first = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
@@ -255,7 +255,7 @@ describe('StationPtyProvider', () => {
     vi.mocked(client.openPtyStream).mockResolvedValueOnce(secondSocket)
     const second = await provider.spawn({ cols: 100, rows: 30, command: 'zsh', cwd: '/tmp/two' })
 
-    await provider.shutdown(first.id, {})
+    await provider.shutdown(first.id, { immediate: true })
 
     expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
     expect(socket.close).toHaveBeenCalledTimes(1)
@@ -266,17 +266,17 @@ describe('StationPtyProvider', () => {
     expect(exitHandler).toHaveBeenCalledWith({ id: first.id, code: 0 })
   })
 
-  it('preserves tracked state and suppresses exit when remote close fails', async () => {
+  it('preserves tracked state and suppresses exit when immediate remote close fails', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
 
     vi.mocked(client.closePty).mockRejectedValueOnce(new Error('close failed'))
 
-    await expect(provider.shutdown(id, {})).rejects.toThrow('close failed')
+    await expect(provider.shutdown(id, { immediate: true })).rejects.toThrow('close failed')
 
-    expect(socket.close).not.toHaveBeenCalled()
-    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+    expect(socket.close).toHaveBeenCalledTimes(1)
+    expect(await provider.listProcesses()).toEqual([])
     expect(exitHandler).not.toHaveBeenCalled()
   })
 
@@ -303,7 +303,7 @@ describe('StationPtyProvider', () => {
 
     const closeRequest = deferredPromise<void>()
     vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
-    const shutdownPromise = provider.shutdown(id, {})
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
 
     socket.emit('close')
     closeRequest.resolve(undefined)
@@ -331,7 +331,7 @@ describe('StationPtyProvider', () => {
 
     provider.write(id, 'echo hello')
     await provider.attach(id)
-    await provider.shutdown(id, {})
+    await provider.shutdown(id, { immediate: true })
 
     expect(socket.send).toHaveBeenCalledWith(Buffer.from('echo hello', 'utf8'))
     expect(client.openPtyStream).toHaveBeenCalledTimes(2)
@@ -372,8 +372,8 @@ describe('StationPtyProvider', () => {
 
     const state = await provider.serialize([first.id, second.id])
 
-    await provider.shutdown(first.id, {})
-    await provider.shutdown(second.id, {})
+    await provider.shutdown(first.id, { immediate: true })
+    await provider.shutdown(second.id, { immediate: true })
     await provider.revive(state)
 
     expect(await provider.listProcesses()).toEqual([
@@ -462,5 +462,87 @@ describe('StationPtyProvider', () => {
 
     expect(dataHandler).not.toHaveBeenCalled()
     expect(exitHandler).not.toHaveBeenCalled()
+  })
+
+  it('uses Station PTY Session id as app id after create', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: {
+        workspace_id: 'ws_123',
+        pty_id: 'pty_019efcab63117a93ac4ab54dcae3c910',
+        process_id: 'proc_1',
+        station_link: 'station://workspace/ws_123/pty/pty_019efcab63117a93ac4ab54dcae3c910',
+        name: 'orca-shell',
+        cwd: '/home/station/workspace',
+        argv: ['zsh'],
+        observed_status: 'running'
+      },
+      handle: {
+        pty_id: '019efcab-6311-7a93-ac4a-b54dcae3c910',
+        process_id: 'proc_1',
+        reused: false
+      }
+    })
+
+    const result = await provider.spawn({ rows: 40, cols: 120 })
+
+    expect(result.id).toBe('ssh:station%3Aws_123@@pty_019efcab63117a93ac4ab54dcae3c910')
+    expect(client.openPtyStream).toHaveBeenCalledWith(
+      'ws_123',
+      'pty_019efcab63117a93ac4ab54dcae3c910'
+    )
+  })
+
+  it('detaches on non-immediate shutdown without closing Station PTY Session', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: {
+        workspace_id: 'ws_123',
+        pty_id: 'pty_019efcab63117a93ac4ab54dcae3c910',
+        process_id: 'proc_1',
+        station_link: 'station://workspace/ws_123/pty/pty_019efcab63117a93ac4ab54dcae3c910',
+        name: 'orca-shell',
+        cwd: '/home/station/workspace',
+        argv: ['zsh'],
+        observed_status: 'running'
+      },
+      handle: {
+        pty_id: '019efcab-6311-7a93-ac4a-b54dcae3c910',
+        process_id: 'proc_1',
+        reused: false
+      }
+    })
+    const result = await provider.spawn({ rows: 40, cols: 120 })
+
+    await provider.shutdown(result.id, { immediate: false })
+
+    expect(client.closePty).not.toHaveBeenCalled()
+    expect(socket.close).toHaveBeenCalled()
+  })
+
+  it('terminates on immediate shutdown by closing Station PTY Session', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: {
+        workspace_id: 'ws_123',
+        pty_id: 'pty_019efcab63117a93ac4ab54dcae3c910',
+        process_id: 'proc_1',
+        station_link: 'station://workspace/ws_123/pty/pty_019efcab63117a93ac4ab54dcae3c910',
+        name: 'orca-shell',
+        cwd: '/home/station/workspace',
+        argv: ['zsh'],
+        observed_status: 'running'
+      },
+      handle: {
+        pty_id: '019efcab-6311-7a93-ac4a-b54dcae3c910',
+        process_id: 'proc_1',
+        reused: false
+      }
+    })
+    const result = await provider.spawn({ rows: 40, cols: 120 })
+
+    await provider.shutdown(result.id, { immediate: true })
+
+    expect(client.closePty).toHaveBeenCalledWith(
+      'ws_123',
+      'pty_019efcab63117a93ac4ab54dcae3c910'
+    )
   })
 })

@@ -447,6 +447,10 @@ export function splitPaneWithOneShotStartup<TPane>(
   }
 }
 
+function isStationPtyId(ptyId: string): boolean {
+  return ptyId.startsWith('ssh:station%3A')
+}
+
 export function shouldDetachPaneTransportOnUnmount(args: {
   tabStillExists: boolean
   tabId: string
@@ -455,6 +459,9 @@ export function shouldDetachPaneTransportOnUnmount(args: {
 }): boolean {
   if (!args.ptyId) {
     return false
+  }
+  if (isStationPtyId(args.ptyId)) {
+    return true
   }
   if (args.tabStillExists) {
     return true

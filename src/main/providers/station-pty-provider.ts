@@ -63,16 +63,17 @@ export class StationPtyProvider implements IPtyProvider {
       rows: opts.rows,
       cols: opts.cols
     })
-    const appId = this.toAppPtyId(response.handle.pty_id)
+    const ptySessionId = response.pty.pty_id
+    const appId = this.toAppPtyId(ptySessionId)
     const tracked = {
-      ptyId: response.handle.pty_id,
+      ptyId: ptySessionId,
       cwd: opts.cwd ?? response.pty.cwd ?? DEFAULT_CWD,
       title: response.pty.name || (opts.command ? `orca-${opts.command}` : 'orca-shell')
     }
     try {
       await this.openStream(appId, tracked)
     } catch (error) {
-      await this.closeSpawnedPty(response.handle.pty_id)
+      await this.closeSpawnedPty(ptySessionId)
       throw error
     }
     this.trackPty(appId, tracked)
@@ -112,16 +113,18 @@ export class StationPtyProvider implements IPtyProvider {
     })
   }
 
-  async shutdown(id: string, _opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
+  async shutdown(id: string, opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
     const tracked = this.requireTrackedPty(appId)
-    await this.client.closePty(this.workspaceId, tracked.ptyId)
-
     const socket = this.sockets.get(appId)
     this.sockets.delete(appId)
     this.trackedPtys.delete(appId)
     socket?.close()
-    this.emitExit({ id: appId, code: 0 })
+
+    if (opts.immediate) {
+      await this.client.closePty(this.workspaceId, tracked.ptyId)
+      this.emitExit({ id: appId, code: 0 })
+    }
   }
 
   async sendSignal(_id: string, _signal: string): Promise<void> {

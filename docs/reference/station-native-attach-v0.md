@@ -43,11 +43,11 @@ That connection id routes PTY operations through Orca's Station PTY provider, no
 The Station provider uses:
 
 - workspace inspect
-- tracked PTY create
-- PTY stream-info
-- direct workspaced WebSocket stream
-- tracked PTY resize
-- tracked PTY close
+- PTY Session create
+- PTY stream-info by Station PTY Session id
+- direct workspaced WebSocket stream resolved by Station
+- tracked PTY resize by Station PTY Session id
+- explicit PTY terminate by Station PTY Session id
 
 ## Smoke Test
 

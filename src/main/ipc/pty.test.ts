@@ -3976,6 +3976,42 @@ describe('registerPtyHandlers', () => {
     expect(store.markSshRemotePtyLease).toHaveBeenCalledWith('ssh-1', 'relay-pty', 'terminated')
   })
 
+  it('kills Station PTY ids through the Station provider with explicit terminate semantics', async () => {
+    const stationShutdown = vi.fn(async () => undefined)
+    registerSshPtyProvider(stationConnectionId('ws_123'), {
+      spawn: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      shutdown: stationShutdown,
+      sendSignal: vi.fn(),
+      getCwd: vi.fn(),
+      getInitialCwd: vi.fn(),
+      clearBuffer: vi.fn(),
+      acknowledgeDataEvent: vi.fn(),
+      onData: vi.fn(() => () => {}),
+      onReplay: vi.fn(() => () => {}),
+      onExit: vi.fn(() => () => {}),
+      listProcesses: vi.fn(async () => []),
+      hasChildProcesses: vi.fn(),
+      getForegroundProcess: vi.fn(),
+      serialize: vi.fn(),
+      revive: vi.fn(),
+      attach: vi.fn(),
+      getDefaultShell: vi.fn(),
+      getProfiles: vi.fn()
+    } as never)
+    registerPtyHandlers(mainWindow as never)
+
+    const stationPtyId = 'ssh:station%3Aws_123@@pty_019efcab63117a93ac4ab54dcae3c910'
+
+    await handlers.get('pty:kill')!(null, { id: stationPtyId })
+
+    expect(stationShutdown).toHaveBeenCalledWith(stationPtyId, {
+      immediate: true,
+      keepHistory: false
+    })
+  })
+
   it('tombstones app-scoped SSH PTY ids instead of falling back local when ownership and provider are absent', async () => {
     const localShutdown = vi.fn()
     setLocalPtyProvider({

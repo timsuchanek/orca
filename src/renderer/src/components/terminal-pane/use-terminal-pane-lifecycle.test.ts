@@ -161,6 +161,28 @@ describe('shouldDetachPaneTransportOnUnmount', () => {
       })
     ).toBe(false)
   })
+
+  it('detaches Station PTYs when the pane closes even when no replacement tab owns it', () => {
+    expect(
+      shouldDetachPaneTransportOnUnmount({
+        tabStillExists: false,
+        tabId: 'tab-1',
+        ptyId: 'ssh:station%3Aws_123@@pty_019efcab63117a93ac4ab54dcae3c910',
+        worktreeTabs: []
+      })
+    ).toBe(true)
+  })
+
+  it('still destroys non-Station PTYs when the tab is gone and no replacement owns it', () => {
+    expect(
+      shouldDetachPaneTransportOnUnmount({
+        tabStillExists: false,
+        tabId: 'tab-1',
+        ptyId: 'remote:env@@term-1',
+        worktreeTabs: []
+      })
+    ).toBe(false)
+  })
 })
 
 describe('mapRestoredPaneTitlesByPaneId', () => {
