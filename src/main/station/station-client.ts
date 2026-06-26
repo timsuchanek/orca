@@ -113,7 +113,7 @@ export class StationClient {
     return this.requestJson<StationWorkspaceInspectResponse>(
       'GET',
       `/v1/workspaces/${encodeURIComponent(workspaceId)}/inspect`
-    )
+    ).then(validateInspectWorkspaceResponse)
   }
 
   createPty(
@@ -262,6 +262,27 @@ function validateCreatePtyResponse(response: StationCreatePtyResponse): StationC
   }
   if (!isRecord(response.handle) || response.handle.pty_id !== response.pty.pty_id) {
     throw new Error('Station create PTY response handle did not match pty')
+  }
+  return response
+}
+
+function validateInspectWorkspaceResponse(
+  response: StationWorkspaceInspectResponse
+): StationWorkspaceInspectResponse {
+  if (
+    !isRecord(response) ||
+    !isRecord(response.workspace) ||
+    typeof response.workspace.id !== 'string' ||
+    response.workspace.id.length === 0 ||
+    typeof response.workspace.name !== 'string' ||
+    response.workspace.name.length === 0 ||
+    !isRecord(response.source) ||
+    !Array.isArray(response.routes) ||
+    !Array.isArray(response.services) ||
+    !Array.isArray(response.agents) ||
+    !Array.isArray(response.ptys)
+  ) {
+    throw new Error('Station inspect workspace response was invalid')
   }
   return response
 }
