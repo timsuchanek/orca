@@ -705,6 +705,43 @@ describe('StationPtyProvider', () => {
     expect(slowSocket.send).not.toHaveBeenCalled()
   })
 
+  it('keeps one stream when concurrent untracked attach attempts resolve out of order', async () => {
+    const dataHandler = vi.fn()
+    provider.onData(dataHandler)
+    const id = 'ssh:station%3Aws_123@@pty_restore_race'
+    const slowOpen = deferredPromise<StationWebSocket>()
+    const fastOpen = deferredPromise<StationWebSocket>()
+    const slowSocket = new FakeWebSocket()
+    const fastSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream)
+      .mockReturnValueOnce(slowOpen.promise)
+      .mockReturnValueOnce(fastOpen.promise)
+
+    const slowAttach = provider.attach(id)
+    await vi.waitFor(() =>
+      expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_restore_race')
+    )
+    const fastAttach = provider.attach(id)
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+
+    fastOpen.resolve(fastSocket)
+    await fastAttach
+    slowOpen.resolve(slowSocket)
+    await expect(slowAttach).rejects.toThrow('Station PTY stream open superseded')
+
+    expect(slowSocket.close).toHaveBeenCalledTimes(1)
+    expect(fastSocket.close).not.toHaveBeenCalled()
+    slowSocket.emit('message', Buffer.from('slow-stale', 'utf8'), true)
+    fastSocket.emit('message', Buffer.from('fast-current', 'utf8'), true)
+    provider.write(id, 'after-untracked-race')
+
+    expect(provider.hasPty(id)).toBe(true)
+    expect(dataHandler).toHaveBeenCalledTimes(1)
+    expect(dataHandler).toHaveBeenCalledWith({ id, data: 'fast-current' })
+    expect(fastSocket.send).toHaveBeenCalledWith(Buffer.from('after-untracked-race', 'utf8'))
+    expect(slowSocket.send).not.toHaveBeenCalled()
+  })
+
   it('ignores stale socket close events after reopen during explicit shutdown', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
