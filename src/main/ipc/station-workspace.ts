@@ -191,8 +191,9 @@ export function registerStationWorkspaceHandlers(
         startupDeferred.resolve()
         return metadata
       } catch (error) {
-        startupDeferred.reject(error)
-        throw sanitizeStationAttachError(error, knownSecrets)
+        const sanitizedError = sanitizeStationAttachError(error, knownSecrets)
+        startupDeferred.reject(sanitizedError)
+        throw sanitizedError
       } finally {
         if (stationProviderStartupByConnectionId.get(connectionId) === startupDeferred.promise) {
           stationProviderStartupByConnectionId.delete(connectionId)

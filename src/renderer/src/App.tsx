@@ -1005,14 +1005,17 @@ function App(): React.JSX.Element {
           // are deferred to tab focus to avoid stacking credential dialogs at
           // startup before the user has context.
           const connectionIds = sessionRead.session.activeConnectionIdsAtShutdown ?? []
-          if (connectionIds.length > 0) {
+          const sshConnectionIds = connectionIds.filter(
+            (connectionId) => !connectionId.startsWith('station:')
+          )
+          if (sshConnectionIds.length > 0) {
             try {
               const SSH_RECONNECT_TIMEOUT_MS = 15_000
               const allTargets = await timeRendererStartupStep('ssh-list-targets', () =>
                 window.api.ssh.listTargets()
               )
               const targetMap = new Map(allTargets.map((t) => [t.id, t]))
-              const targets = connectionIds.map((targetId) => ({
+              const targets = sshConnectionIds.map((targetId) => ({
                 targetId,
                 needsPassphrase: targetMap.get(targetId)?.lastRequiredPassphrase ?? false
               }))

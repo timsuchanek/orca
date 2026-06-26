@@ -123,6 +123,7 @@ vi.mock('./pty', () => ({
 }))
 
 import {
+  awaitStationProviderStartup,
   registerStationWorkspaceHandlers,
   resetStationWorkspaceHandlersForTests
 } from './station-workspace'
@@ -446,6 +447,35 @@ describe('registerStationWorkspaceHandlers', () => {
         expect(error.message).not.toContain('dtok_test')
         expect(error.message).not.toContain('station-secret')
       })
+  })
+
+  it('rejects concurrent Station startup waiters with the same redacted attach error', async () => {
+    let rejectInspect!: (error: unknown) => void
+    inspectWorkspaceMock.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectInspect = reject
+        })
+    )
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    const attachPromise = handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+    const startupPromise = awaitStationProviderStartup(stationConnectionId('ws_123'))
+
+    expect(startupPromise).toBeDefined()
+
+    rejectInspect(
+      new Error(
+        'Authorization: Bearer dtok_test:station-secret {"device_token_id":"dtok_test","device_token_secret":"station-secret"}'
+      )
+    )
+
+    await expect(startupPromise).rejects.toThrow('[REDACTED]')
+    await startupPromise!.catch((error: Error) => {
+      expect(error.message).not.toContain('dtok_test')
+      expect(error.message).not.toContain('station-secret')
+    })
+    await expect(attachPromise).rejects.toThrow('[REDACTED]')
   })
 
   it('handles unprintable Station attach errors without replacing them with stringify failures', async () => {

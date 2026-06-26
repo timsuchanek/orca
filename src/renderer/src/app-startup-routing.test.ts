@@ -113,6 +113,21 @@ describe('renderer startup runtime routing', () => {
     expect(hydrationSucceededIndex).toBeGreaterThan(reconnectStartedIndex)
   })
 
+  it('filters Station connection ids out of SSH startup reconnect targets', () => {
+    const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
+    const sshReconnectStart = source.indexOf(
+      'const connectionIds = session.activeConnectionIdsAtShutdown ?? []'
+    )
+    const sshReconnectEnd = source.indexOf('await Promise.allSettled(', sshReconnectStart)
+    const sshReconnectBlock = source.slice(sshReconnectStart, sshReconnectEnd)
+
+    expect(sshReconnectBlock).toContain('const sshConnectionIds = connectionIds.filter(')
+    expect(sshReconnectBlock).toContain("!connectionId.startsWith('station:')")
+    expect(sshReconnectBlock).toContain('if (sshConnectionIds.length > 0) {')
+    expect(sshReconnectBlock).toContain('const targets = sshConnectionIds.map((targetId) => ({')
+    expect(sshReconnectBlock).not.toContain('const targets = connectionIds.map((targetId) => ({')
+  })
+
   it('does not eagerly import the floating terminal panel on startup', () => {
     const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
 
