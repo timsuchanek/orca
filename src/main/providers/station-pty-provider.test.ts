@@ -1000,6 +1000,20 @@ describe('StationPtyProvider', () => {
     await expect(provider.hasChildProcesses(id)).resolves.toBe(false)
   })
 
+  it('does not report child processes while Station PTY terminate is in flight', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+
+    await expect(provider.hasChildProcesses(id)).resolves.toBe(false)
+
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+  })
+
   it('rejects PTY signals in v0', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
 
