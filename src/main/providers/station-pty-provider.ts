@@ -261,16 +261,30 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   private async openAndTrackPty(appId: string, tracked: TrackedPty): Promise<void> {
-    await this.openStream(appId, tracked)
+    const socket = await this.openStream(appId, tracked)
+    if (this.disposed) {
+      socket.close()
+      throw new Error('Station PTY provider disposed')
+    }
     this.trackPty(appId, tracked)
   }
 
-  private async openStream(appId: string, tracked = this.requireTrackedPty(appId)): Promise<void> {
+  private async openStream(
+    appId: string,
+    tracked = this.requireTrackedPty(appId)
+  ): Promise<StationWebSocket> {
+    if (this.disposed) {
+      throw new Error('Station PTY provider disposed')
+    }
     const priorSocket = this.sockets.get(appId)
     if (priorSocket && priorSocket.readyState === SOCKET_OPEN) {
       priorSocket.close()
     }
     const socket = await this.client.openPtyStream(this.workspaceId, tracked.ptyId)
+    if (this.disposed) {
+      socket.close()
+      throw new Error('Station PTY provider disposed')
+    }
     socket.on('message', (payload) => {
       if (this.disposed || this.sockets.get(appId) !== socket || !this.trackedPtys.has(appId)) {
         return
@@ -294,6 +308,7 @@ export class StationPtyProvider implements IPtyProvider {
       })
     })
     this.sockets.set(appId, socket)
+    return socket
   }
 
   private async emitExitIfRemotePtyStopped(appId: string, ptyId: string): Promise<void> {

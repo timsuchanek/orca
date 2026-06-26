@@ -463,6 +463,23 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('does not track an attached PTY when provider is disposed before stream open completes', async () => {
+    const id = 'ssh:station%3Aws_123@@pty_slow_attach'
+    const streamOpen = deferredPromise<StationWebSocket>()
+    const openedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(streamOpen.promise)
+
+    const attachPromise = provider.attach(id)
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_slow_attach'))
+    provider.dispose()
+    streamOpen.resolve(openedSocket)
+
+    await expect(attachPromise).rejects.toThrow('Station PTY provider disposed')
+    expect(openedSocket.close).toHaveBeenCalledTimes(1)
+    expect(provider.hasPty(id)).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores stale socket close events after reopen during explicit shutdown', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
@@ -573,6 +590,51 @@ describe('StationPtyProvider', () => {
     expect(firstSocket.close).toHaveBeenCalledTimes(1)
     expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_1')).toBe(false)
     expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_2')).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('rolls back revived PTY state when provider is disposed during persisted stream reopen', async () => {
+    const state = JSON.stringify({
+      workspaceId: 'ws_123',
+      ptys: [
+        { ptyId: 'pty_restore_1', cwd: '/tmp/one', title: 'one' },
+        { ptyId: 'pty_restore_2', cwd: '/tmp/two', title: 'two' }
+      ]
+    })
+    const firstSocket = new FakeWebSocket()
+    const secondOpen = deferredPromise<StationWebSocket>()
+    const secondSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream)
+      .mockResolvedValueOnce(firstSocket)
+      .mockReturnValueOnce(secondOpen.promise)
+
+    const revivePromise = provider.revive(state)
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    provider.dispose()
+    secondOpen.resolve(secondSocket)
+
+    await expect(revivePromise).rejects.toThrow('Station PTY provider disposed')
+    expect(firstSocket.close).toHaveBeenCalledTimes(1)
+    expect(secondSocket.close).toHaveBeenCalledTimes(1)
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_1')).toBe(false)
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_2')).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('closes a newly-created Station PTY when provider is disposed before spawn stream opens', async () => {
+    const streamOpen = deferredPromise<StationWebSocket>()
+    const openedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(streamOpen.promise)
+
+    const spawnPromise = provider.spawn({ cols: 80, rows: 24 })
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    provider.dispose()
+    streamOpen.resolve(openedSocket)
+
+    await expect(spawnPromise).rejects.toThrow('Station PTY provider disposed')
+    expect(openedSocket.close).toHaveBeenCalledTimes(1)
+    expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_123')).toBe(false)
     expect(await provider.listProcesses()).toEqual([])
   })
 
