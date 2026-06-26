@@ -28,6 +28,7 @@ export class StationPtyProvider implements IPtyProvider {
   private sockets = new Map<string, StationWebSocket>()
   private trackedPtys = new Map<string, TrackedPty>()
   private pendingWrites = new Map<string, Promise<void>>()
+  private writeGenerations = new Map<string, number>()
   private streamOpenGenerations = new Map<string, number>()
   private terminatingPtys = new Set<string>()
   private terminatingClosePromises = new Map<string, Promise<void>>()
@@ -146,6 +147,8 @@ export class StationPtyProvider implements IPtyProvider {
         return terminatingClose
       }
       this.terminatingPtys.add(appId)
+      this.pendingWrites.delete(appId)
+      this.writeGenerations.set(appId, this.writeGeneration(appId) + 1)
       const closePromise = this.closeTrackedPty(appId, tracked.ptyId)
       this.terminatingClosePromises.set(appId, closePromise)
       return closePromise
@@ -258,6 +261,7 @@ export class StationPtyProvider implements IPtyProvider {
     }
     this.disposed = true
     this.pendingWrites.clear()
+    this.writeGenerations.clear()
     this.streamOpenGenerations.clear()
     this.terminatingPtys.clear()
     this.terminatingClosePromises.clear()
@@ -418,6 +422,7 @@ export class StationPtyProvider implements IPtyProvider {
 
   private detachLocalPty(appId: string): void {
     this.pendingWrites.delete(appId)
+    this.writeGenerations.delete(appId)
     const socket = this.sockets.get(appId)
     this.sockets.delete(appId)
     this.trackedPtys.delete(appId)
@@ -429,9 +434,15 @@ export class StationPtyProvider implements IPtyProvider {
 
   private queueWriteAfterReconnect(appId: string, payload: Buffer): void {
     const prior = this.pendingWrites.get(appId) ?? Promise.resolve()
+    const generation = this.writeGeneration(appId)
     const next = prior
       .then(async () => {
-        if (this.disposed || !this.trackedPtys.has(appId) || this.terminatingPtys.has(appId)) {
+        if (
+          this.disposed ||
+          !this.trackedPtys.has(appId) ||
+          this.terminatingPtys.has(appId) ||
+          this.writeGeneration(appId) !== generation
+        ) {
           return
         }
         let socket = this.sockets.get(appId)
@@ -439,7 +450,12 @@ export class StationPtyProvider implements IPtyProvider {
           await this.openStream(appId)
           socket = this.sockets.get(appId)
         }
-        if (this.disposed || !this.trackedPtys.has(appId) || this.terminatingPtys.has(appId)) {
+        if (
+          this.disposed ||
+          !this.trackedPtys.has(appId) ||
+          this.terminatingPtys.has(appId) ||
+          this.writeGeneration(appId) !== generation
+        ) {
           this.sockets.get(appId)?.close()
           this.sockets.delete(appId)
           return
@@ -461,6 +477,10 @@ export class StationPtyProvider implements IPtyProvider {
         }
       })
     this.pendingWrites.set(appId, next)
+  }
+
+  private writeGeneration(appId: string): number {
+    return this.writeGenerations.get(appId) ?? 0
   }
 }
 

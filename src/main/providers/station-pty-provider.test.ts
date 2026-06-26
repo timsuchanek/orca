@@ -274,6 +274,25 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('drops queued writes once explicit terminate has been requested even if close fails', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    socket.readyState = 0
+    const reconnect = deferredPromise<StationWebSocket>()
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(reconnect.promise)
+    vi.mocked(client.closePty).mockRejectedValueOnce(new Error('close failed'))
+
+    provider.write(id, 'stale input')
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    await expect(provider.shutdown(id, { immediate: true })).rejects.toThrow('close failed')
+    reconnect.resolve(reopenedSocket)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(reopenedSocket.send).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+  })
+
   it('calls Station HTTP resize with Station row and col ordering', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
 
