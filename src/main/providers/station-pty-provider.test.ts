@@ -1191,6 +1191,7 @@ describe('StationPtyProvider', () => {
   })
 
   it('rejects malformed persisted Station PTY state before opening streams', async () => {
+    await expect(provider.revive('{not-json')).rejects.toThrow('Invalid Station PTY state')
     await expect(provider.revive(JSON.stringify({ workspaceId: 'ws_123', ptys: 'nope' }))).rejects.toThrow(
       'Invalid Station PTY state'
     )

@@ -571,7 +571,12 @@ function sanitizeStationPtyTransportError(error: unknown): string {
 }
 
 function parseSerializedState(state: string, workspaceId: string): SerializedState {
-  const parsed = JSON.parse(state) as unknown
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(state) as unknown
+  } catch {
+    throw new Error('Invalid Station PTY state')
+  }
   if (!isRecord(parsed)) {
     throw new Error('Invalid Station PTY state')
   }
