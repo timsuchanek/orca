@@ -27,6 +27,7 @@ export class StationPtyProvider implements IPtyProvider {
   private replayListeners = new Set<ReplayCallback>()
   private sockets = new Map<string, StationWebSocket>()
   private trackedPtys = new Map<string, TrackedPty>()
+  private pendingWrites = new Map<string, Promise<void>>()
   private disposed = false
 
   constructor(
@@ -100,7 +101,8 @@ export class StationPtyProvider implements IPtyProvider {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
     const socket = this.sockets.get(appId)
     if (!socket || socket.readyState !== SOCKET_OPEN) {
-      throw new Error(`Station PTY stream is not open for ${appId}`)
+      this.queueWriteAfterReconnect(appId, Buffer.from(data, 'utf8'))
+      return
     }
     socket.send(Buffer.from(data, 'utf8'))
   }
@@ -217,6 +219,7 @@ export class StationPtyProvider implements IPtyProvider {
       return
     }
     this.disposed = true
+    this.pendingWrites.clear()
     for (const socket of this.sockets.values()) {
       socket.close()
     }
@@ -263,8 +266,8 @@ export class StationPtyProvider implements IPtyProvider {
     socket.on('close', () => {
       if (this.sockets.get(appId) === socket) {
         this.sockets.delete(appId)
+        void this.emitExitIfRemotePtyStopped(appId, tracked.ptyId)
       }
-      void this.emitExitIfRemotePtyStopped(appId, tracked.ptyId)
     })
     socket.on('error', (error) => {
       console.error('[station-pty] stream transport error', {
@@ -318,10 +321,47 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   private detachLocalPty(appId: string): void {
+    this.pendingWrites.delete(appId)
     const socket = this.sockets.get(appId)
     this.sockets.delete(appId)
     this.trackedPtys.delete(appId)
     socket?.close()
+  }
+
+  private queueWriteAfterReconnect(appId: string, payload: Buffer): void {
+    const prior = this.pendingWrites.get(appId) ?? Promise.resolve()
+    const next = prior
+      .then(async () => {
+        if (this.disposed || !this.trackedPtys.has(appId)) {
+          return
+        }
+        let socket = this.sockets.get(appId)
+        if (!socket || socket.readyState !== SOCKET_OPEN) {
+          await this.openStream(appId)
+          socket = this.sockets.get(appId)
+        }
+        if (this.disposed || !this.trackedPtys.has(appId)) {
+          this.sockets.get(appId)?.close()
+          this.sockets.delete(appId)
+          return
+        }
+        if (!socket || socket.readyState !== SOCKET_OPEN) {
+          throw new Error(`Station PTY stream is not open for ${appId}`)
+        }
+        socket.send(payload)
+      })
+      .catch((error) => {
+        console.error('[station-pty] queued write failed', {
+          id: appId,
+          error: sanitizeStationPtyTransportError(error)
+        })
+      })
+      .finally(() => {
+        if (this.pendingWrites.get(appId) === next) {
+          this.pendingWrites.delete(appId)
+        }
+      })
+    this.pendingWrites.set(appId, next)
   }
 }
 

@@ -172,12 +172,80 @@ describe('StationPtyProvider', () => {
     expect(socket.send).toHaveBeenCalledWith(Buffer.from('echo hello', 'utf8'))
   })
 
-  it('throws when writing to a PTY whose socket is not open', async () => {
+  it('reopens the Station stream when writing to a tracked PTY whose socket is not open', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
     socket.readyState = 0
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSocket)
 
-    expect(() => provider.write(id, 'echo hello')).toThrow('Station PTY stream is not open')
+    provider.write(id, 'echo hello')
+
     expect(socket.send).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(reopenedSocket.send).toHaveBeenCalledWith(Buffer.from('echo hello', 'utf8'))
+    )
+    expect(client.openPtyStream).toHaveBeenCalledTimes(2)
+    expect(client.openPtyStream).toHaveBeenLastCalledWith('ws_123', 'pty_123')
+  })
+
+  it('preserves write order while a Station stream reconnect is pending', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    socket.readyState = 0
+    const reconnect = deferredPromise<StationWebSocket>()
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(reconnect.promise)
+
+    provider.write(id, 'first')
+    provider.write(id, 'second')
+
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    reconnect.resolve(reopenedSocket)
+    await vi.waitFor(() =>
+      expect(reopenedSocket.send).toHaveBeenNthCalledWith(2, Buffer.from('second', 'utf8'))
+    )
+
+    expect(reopenedSocket.send).toHaveBeenNthCalledWith(1, Buffer.from('first', 'utf8'))
+    expect(client.openPtyStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores stale close events from a replaced Station stream', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    socket.readyState = 0
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSocket)
+    vi.mocked(client.getPtyStatus).mockResolvedValueOnce({
+      pty_id: 'pty_123',
+      status: 'exited',
+      exit_code: 9
+    })
+
+    provider.write(id, 'after reconnect')
+    await vi.waitFor(() => expect(reopenedSocket.send).toHaveBeenCalled())
+    socket.emit('close')
+
+    expect(client.getPtyStatus).not.toHaveBeenCalled()
+    expect(exitHandler).not.toHaveBeenCalled()
+    expect(provider.hasPty(id)).toBe(true)
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+  })
+
+  it('does not resurrect a detached Station PTY when a queued write reconnect completes late', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    socket.readyState = 0
+    const reconnect = deferredPromise<StationWebSocket>()
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(reconnect.promise)
+
+    provider.write(id, 'late write')
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    await provider.shutdown(id, { immediate: false })
+    reconnect.resolve(reopenedSocket)
+    await vi.waitFor(() => expect(reopenedSocket.close).toHaveBeenCalledTimes(1))
+
+    expect(reopenedSocket.send).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([])
   })
 
   it('calls Station HTTP resize with Station row and col ordering', async () => {
