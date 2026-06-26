@@ -121,7 +121,10 @@ import {
   resetStationWorkspaceHandlersForTests
 } from './station-workspace'
 
-function inspectResponse(providerObserved: string | null = 'live') {
+function inspectResponse(
+  providerObserved: string | null = 'live',
+  workspaceOverrides: Record<string, unknown> = {}
+) {
   return {
     workspace: {
       id: 'ws_123',
@@ -131,7 +134,8 @@ function inspectResponse(providerObserved: string | null = 'live') {
       tombstoned: false,
       provider_kind: 'e2b',
       provider_observed: providerObserved,
-      repository_display: 'github.com/expandai/expand'
+      repository_display: 'github.com/expandai/expand',
+      ...workspaceOverrides
     },
     source: {
       source: {
@@ -315,6 +319,18 @@ describe('registerStationWorkspaceHandlers', () => {
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
     ).rejects.toThrow('provider is dead')
+    expect(registerSshPtyProviderMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects attach when Station reports a tombstoned workspace', async () => {
+    inspectWorkspaceMock.mockResolvedValue(
+      inspectResponse('live', { lifecycle: 'Destroyed', tombstoned: true })
+    )
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+
+    await expect(
+      handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+    ).rejects.toThrow('workspace is destroyed')
     expect(registerSshPtyProviderMock).not.toHaveBeenCalled()
   })
 

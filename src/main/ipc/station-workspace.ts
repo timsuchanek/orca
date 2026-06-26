@@ -103,6 +103,10 @@ export function registerStationWorkspaceHandlers(
         bearerToken
       })
       const inspected = await client.inspectWorkspace(workspaceId)
+      const lifecycle = inspected.workspace.lifecycle.trim().toLowerCase()
+      if (inspected.workspace.tombstoned || lifecycle === 'destroyed') {
+        throw new Error(`Station workspace "${workspaceId}" workspace is destroyed`)
+      }
       const providerObserved = inspected.workspace.provider_observed?.trim().toLowerCase()
       if (providerObserved === 'missing' || providerObserved === 'dead') {
         throw new Error(`Station workspace "${workspaceId}" provider is ${providerObserved}`)
