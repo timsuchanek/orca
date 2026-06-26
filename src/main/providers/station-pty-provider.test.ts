@@ -441,6 +441,26 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
+  it('keeps explicit terminate authoritative when a local detach races with it', async () => {
+    const exitHandler = vi.fn()
+    provider.onExit(exitHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const firstShutdown = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    await provider.shutdown(id, { immediate: false })
+    const secondShutdown = provider.shutdown(id, { immediate: true })
+    closeRequest.reject(new Error('close failed'))
+
+    await expect(firstShutdown).rejects.toThrow('close failed')
+    await expect(secondShutdown).rejects.toThrow('close failed')
+    expect(client.closePty).toHaveBeenCalledTimes(1)
+    expect(exitHandler).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
+  })
+
   it('omits terminating Station PTYs from serialized pane state', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
     const closeRequest = deferredPromise<void>()

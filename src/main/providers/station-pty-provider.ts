@@ -151,6 +151,9 @@ export class StationPtyProvider implements IPtyProvider {
       return closePromise
     }
 
+    if (this.terminatingPtys.has(appId)) {
+      return
+    }
     this.detachLocalPty(appId)
   }
 
