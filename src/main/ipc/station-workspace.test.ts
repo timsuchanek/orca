@@ -13,6 +13,7 @@ const {
   clearProviderPtyStateMock,
   deletePtyOwnershipMock,
   stationProviderInstances,
+  stationListProcessesMock,
   destroyWorkspaceMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -26,6 +27,7 @@ const {
   clearProviderPtyStateMock: vi.fn(),
   deletePtyOwnershipMock: vi.fn(),
   stationProviderInstances: [] as unknown[],
+  stationListProcessesMock: vi.fn(),
   destroyWorkspaceMock: vi.fn()
 }))
 
@@ -82,9 +84,7 @@ vi.mock('../providers/station-pty-provider', () => ({
     }
 
     listProcesses(): Promise<Array<{ id: string; cwd: string; title: string }>> {
-      return Promise.resolve([
-        { id: 'ssh:station%3Aws_123@@pty_1', cwd: '/tmp/one', title: 'orca-shell' }
-      ])
+      return stationListProcessesMock()
     }
 
     dispose(): void {}
@@ -199,6 +199,10 @@ describe('registerStationWorkspaceHandlers', () => {
     unregisterSshPtyProviderMock.mockReset()
     clearProviderPtyStateMock.mockReset()
     deletePtyOwnershipMock.mockReset()
+    stationListProcessesMock.mockReset()
+    stationListProcessesMock.mockResolvedValue([
+      { id: 'ssh:station%3Aws_123@@pty_1', cwd: '/tmp/one', title: 'orca-shell' }
+    ])
     destroyWorkspaceMock.mockReset()
     mainWindow.isDestroyed.mockReturnValue(false)
     mainWindow.webContents.send.mockReset()
@@ -314,6 +318,26 @@ describe('registerStationWorkspaceHandlers', () => {
     await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
 
     expect(runtime.onPtyExit).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1', 0)
+  })
+
+  it('detaches and unregisters when active Station PTY listing fails', async () => {
+    stationListProcessesMock.mockRejectedValueOnce(new Error('station list failed'))
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+
+    const provider = latestProvider()
+    const disposeSpy = vi.spyOn(provider, 'dispose')
+
+    await expect(
+      handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
+    ).resolves.toBeUndefined()
+
+    expect(unregisterSshPtyProviderMock).toHaveBeenCalledWith(stationConnectionId('ws_123'))
+    expect(disposeSpy).toHaveBeenCalledTimes(1)
+
+    await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+
+    expect(stationProviderInstances).toHaveLength(2)
   })
 
   it('rejects missing Station credentials without registering a provider', async () => {

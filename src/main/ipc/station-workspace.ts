@@ -150,16 +150,21 @@ export function registerStationWorkspaceHandlers(
     if (!active) {
       return
     }
-    const activePtyIds = (await active.provider.listProcesses()).map((pty) => pty.id)
-    for (const ptyId of activePtyIds) {
-      clearProviderPtyState(ptyId)
-      deletePtyOwnership(ptyId)
-      runtime?.onPtyExit(ptyId, 0)
+    try {
+      const activePtyIds = (await active.provider.listProcesses()).map((pty) => pty.id)
+      for (const ptyId of activePtyIds) {
+        clearProviderPtyState(ptyId)
+        deletePtyOwnership(ptyId)
+        runtime?.onPtyExit(ptyId, 0)
+      }
+    } catch {
+      // Detach must still tear down the local provider even if Station cannot list PTYs.
+    } finally {
+      active.unsubscribeEvents()
+      unregisterSshPtyProvider(active.connectionId)
+      active.provider.dispose()
+      activeStationWorkspaces.delete(workspaceId)
     }
-    active.unsubscribeEvents()
-    unregisterSshPtyProvider(active.connectionId)
-    active.provider.dispose()
-    activeStationWorkspaces.delete(workspaceId)
   })
 }
 
