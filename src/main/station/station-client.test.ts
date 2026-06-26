@@ -356,6 +356,26 @@ describe('StationClient', () => {
     expect(FakeWebSocket.instances).toEqual([])
   })
 
+  it('rejects blank stream-info bearer tokens before opening a WebSocket', async () => {
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        url: 'ws://127.0.0.1:18080/v1/pty/pty_123/stream',
+        bearer_token: '   '
+      })
+    )
+    const client = new StationClient({
+      baseUrl: 'http://127.0.0.1:18080',
+      bearerToken: 'dtok_test:secret',
+      WebSocketCtor: FakeWebSocket as unknown as StationWebSocketConstructor
+    })
+
+    await expect(client.openPtyStream('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY stream-info response missing bearer_token'
+    )
+
+    expect(FakeWebSocket.instances).toEqual([])
+  })
+
   it('throws a Station-specific error for invalid JSON responses', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('{not-json', {

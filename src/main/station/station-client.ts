@@ -160,7 +160,7 @@ export class StationClient {
     if (!isWebSocketUrl(info.url)) {
       throw new Error('Station PTY stream-info response had invalid websocket url')
     }
-    if (typeof info.bearer_token !== 'string' || info.bearer_token.length === 0) {
+    if (typeof info.bearer_token !== 'string' || info.bearer_token.trim().length === 0) {
       throw new Error('Station PTY stream-info response missing bearer_token')
     }
     try {
