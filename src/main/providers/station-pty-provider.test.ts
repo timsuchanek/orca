@@ -380,6 +380,15 @@ describe('StationPtyProvider', () => {
     expect(client.resizePty).not.toHaveBeenCalled()
   })
 
+  it('ignores late resize after local detach', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    await provider.shutdown(id, { immediate: false })
+
+    expect(() => provider.resize(id, 132, 55)).not.toThrow()
+    expect(client.resizePty).not.toHaveBeenCalled()
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)
