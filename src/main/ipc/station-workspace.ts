@@ -3,6 +3,8 @@ import { StationPtyProvider } from '../providers/station-pty-provider'
 import { isStationConnectionId, stationConnectionId } from '../providers/station-pty-id'
 import { StationClient } from '../station/station-client'
 import { loadStationCredentials, stationBearerToken } from '../station/station-config'
+import type { Store } from '../persistence'
+import type { StationWorkspaceRecord } from '../../shared/types'
 import {
   clearProviderPtyState,
   deletePtyOwnership,
@@ -12,7 +14,13 @@ import {
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 
 const STATION_WORKSPACE_CWD = '/home/station/workspace'
-const STATION_WORKSPACE_CHANNELS = ['stationWorkspace:attach', 'stationWorkspace:detach'] as const
+const STATION_WORKSPACE_CHANNELS = [
+  'stationWorkspace:attach',
+  'stationWorkspace:detach',
+  'stationWorkspace:list',
+  'stationWorkspace:save',
+  'stationWorkspace:remove'
+] as const
 
 type StationWorkspaceAttachResult = {
   connectionId: string
@@ -69,7 +77,11 @@ export function wireStationPtyEvents(args: {
 
 export function registerStationWorkspaceHandlers(
   mainWindow: BrowserWindow,
-  runtime?: OrcaRuntimeService
+  runtime?: OrcaRuntimeService,
+  store?: Pick<
+    Store,
+    'getStationWorkspaces' | 'upsertStationWorkspace' | 'removeStationWorkspace'
+  >
 ): void {
   for (const channel of STATION_WORKSPACE_CHANNELS) {
     ipcMain.removeHandler(channel)
@@ -166,6 +178,32 @@ export function registerStationWorkspaceHandlers(
       activeStationWorkspaces.delete(workspaceId)
     }
   })
+
+  ipcMain.handle('stationWorkspace:list', async () => {
+    const records = requireStationWorkspaceStore(store).getStationWorkspaces()
+    return records.sort(compareStationWorkspaceRecords)
+  })
+
+  ipcMain.handle('stationWorkspace:save', async (_event, rawArgs: unknown) => {
+    const parsed = parseWorkspaceSaveArgs(rawArgs)
+    const stationStore = requireStationWorkspaceStore(store)
+    const now = Date.now()
+    const existing = stationStore
+      .getStationWorkspaces()
+      .find((record) => record.workspaceId === parsed.workspaceId)
+    return stationStore.upsertStationWorkspace({
+      workspaceId: parsed.workspaceId,
+      name: parsed.name,
+      repositoryDisplay: parsed.repositoryDisplay,
+      addedAt: existing?.addedAt ?? now,
+      updatedAt: now
+    })
+  })
+
+  ipcMain.handle('stationWorkspace:remove', async (_event, rawArgs: unknown) => {
+    const { workspaceId } = parseWorkspaceArgs(rawArgs)
+    return requireStationWorkspaceStore(store).removeStationWorkspace(workspaceId)
+  })
 }
 
 export function resetStationWorkspaceHandlersForTests(): void {
@@ -186,6 +224,59 @@ function parseWorkspaceArgs(value: unknown): { workspaceId: string } {
     throw new Error('Station workspace id is required')
   }
   return { workspaceId: workspaceId.trim() }
+}
+
+function parseWorkspaceSaveArgs(value: unknown): {
+  workspaceId: string
+  name: string
+  repositoryDisplay?: string | null
+} {
+  const { workspaceId } = parseWorkspaceArgs(value)
+  if (!value || typeof value !== 'object') {
+    throw new Error('Station workspace payload is required')
+  }
+
+  const { name, repositoryDisplay } = value as {
+    name?: unknown
+    repositoryDisplay?: unknown
+  }
+
+  if (typeof name !== 'string') {
+    throw new Error('Station workspace name is required')
+  }
+  if (repositoryDisplay !== undefined && repositoryDisplay !== null && typeof repositoryDisplay !== 'string') {
+    throw new Error('Station workspace repository display must be a string or null')
+  }
+
+  const trimmedName = name.trim()
+  return {
+    workspaceId,
+    name: trimmedName.length > 0 ? trimmedName : defaultStationWorkspaceName(workspaceId),
+    repositoryDisplay
+  }
+}
+
+function defaultStationWorkspaceName(workspaceId: string): string {
+  return `Station ${workspaceId.slice(0, 8)}`
+}
+
+function requireStationWorkspaceStore(
+  store: Pick<Store, 'getStationWorkspaces' | 'upsertStationWorkspace' | 'removeStationWorkspace'> | undefined
+): Pick<Store, 'getStationWorkspaces' | 'upsertStationWorkspace' | 'removeStationWorkspace'> {
+  if (!store) {
+    throw new Error('Station workspace persistence store is not configured')
+  }
+  return store
+}
+
+function compareStationWorkspaceRecords(
+  left: StationWorkspaceRecord,
+  right: StationWorkspaceRecord
+): number {
+  if (left.updatedAt !== right.updatedAt) {
+    return right.updatedAt - left.updatedAt
+  }
+  return left.name.localeCompare(right.name)
 }
 
 function sanitizeStationAttachError(error: unknown, knownSecrets: string[]): Error {

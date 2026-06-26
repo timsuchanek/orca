@@ -4174,6 +4174,40 @@ const api = {
       ipcRenderer.invoke('ssh:submitCredential', args)
   },
 
+  stationWorkspace: {
+    list: (): Promise<
+      Array<{
+        workspaceId: string
+        name: string
+        repositoryDisplay?: string | null
+        addedAt: number
+        updatedAt: number
+      }>
+    > => ipcRenderer.invoke('stationWorkspace:list'),
+    save: (args: {
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+    }): Promise<{
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+      addedAt: number
+      updatedAt: number
+    }> => ipcRenderer.invoke('stationWorkspace:save', args),
+    remove: (args: { workspaceId: string }): Promise<boolean> =>
+      ipcRenderer.invoke('stationWorkspace:remove', args),
+    attach: (args: { workspaceId: string }): Promise<{
+      connectionId: string
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+      cwd: string
+    }> => ipcRenderer.invoke('stationWorkspace:attach', args),
+    detach: (args: { workspaceId: string }): Promise<void> =>
+      ipcRenderer.invoke('stationWorkspace:detach', args)
+  },
+
   automations: {
     list: (): Promise<Automation[]> => ipcRenderer.invoke('automations:list'),
     listRuns: (args?: { automationId?: string }): Promise<AutomationRun[]> =>

@@ -14,7 +14,10 @@ const {
   deletePtyOwnershipMock,
   stationProviderInstances,
   stationListProcessesMock,
-  destroyWorkspaceMock
+  destroyWorkspaceMock,
+  getStationWorkspacesMock,
+  upsertStationWorkspaceMock,
+  removeStationWorkspaceMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   removeHandlerMock: vi.fn(),
@@ -28,7 +31,10 @@ const {
   deletePtyOwnershipMock: vi.fn(),
   stationProviderInstances: [] as unknown[],
   stationListProcessesMock: vi.fn(),
-  destroyWorkspaceMock: vi.fn()
+  destroyWorkspaceMock: vi.fn(),
+  getStationWorkspacesMock: vi.fn(),
+  upsertStationWorkspaceMock: vi.fn(),
+  removeStationWorkspaceMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -174,6 +180,11 @@ function latestProvider(): {
 
 describe('registerStationWorkspaceHandlers', () => {
   const handlers = new Map<string, (_event: unknown, args: unknown) => Promise<unknown>>()
+  const store = {
+    getStationWorkspaces: getStationWorkspacesMock,
+    upsertStationWorkspace: upsertStationWorkspaceMock,
+    removeStationWorkspace: removeStationWorkspaceMock
+  }
   const mainWindow = {
     isDestroyed: vi.fn(() => false),
     webContents: {
@@ -204,6 +215,12 @@ describe('registerStationWorkspaceHandlers', () => {
       { id: 'ssh:station%3Aws_123@@pty_1', cwd: '/tmp/one', title: 'orca-shell' }
     ])
     destroyWorkspaceMock.mockReset()
+    getStationWorkspacesMock.mockReset()
+    getStationWorkspacesMock.mockReturnValue([])
+    upsertStationWorkspaceMock.mockReset()
+    upsertStationWorkspaceMock.mockImplementation((record: unknown) => record)
+    removeStationWorkspaceMock.mockReset()
+    removeStationWorkspaceMock.mockReturnValue(true)
     mainWindow.isDestroyed.mockReturnValue(false)
     mainWindow.webContents.send.mockReset()
     runtime.onPtyData.mockReset()
@@ -223,7 +240,7 @@ describe('registerStationWorkspaceHandlers', () => {
 
   it('registers a Station provider and forwards PTY data to runtime and the renderer', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_717_171_717_000)
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     const result = await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
 
@@ -263,7 +280,7 @@ describe('registerStationWorkspaceHandlers', () => {
   })
 
   it('trims pasted Station workspace ids before attaching', async () => {
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     const result = await handlers.get('stationWorkspace:attach')!(null, {
       workspaceId: '  ws_123\n'
@@ -281,7 +298,7 @@ describe('registerStationWorkspaceHandlers', () => {
   })
 
   it('forwards Station PTY exit events and detaches without leaving event wiring active', async () => {
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
     await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
 
     const provider = latestProvider()
@@ -312,7 +329,7 @@ describe('registerStationWorkspaceHandlers', () => {
   })
 
   it('notifies runtime about active Station PTYs during detach', async () => {
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
     await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
 
     await handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
@@ -322,7 +339,7 @@ describe('registerStationWorkspaceHandlers', () => {
 
   it('detaches and unregisters when active Station PTY listing fails', async () => {
     stationListProcessesMock.mockRejectedValueOnce(new Error('station list failed'))
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
     await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
 
     const provider = latestProvider()
@@ -346,7 +363,7 @@ describe('registerStationWorkspaceHandlers', () => {
         'Could not read Station credentials file at /tmp/station-test/credentials.toml'
       )
     })
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
@@ -356,7 +373,7 @@ describe('registerStationWorkspaceHandlers', () => {
 
   it('rejects attach when Station reports a missing or dead provider', async () => {
     inspectWorkspaceMock.mockResolvedValue(inspectResponse('dead'))
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
@@ -368,7 +385,7 @@ describe('registerStationWorkspaceHandlers', () => {
     inspectWorkspaceMock.mockResolvedValue(
       inspectResponse('live', { lifecycle: 'Destroyed', tombstoned: true })
     )
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
@@ -382,7 +399,7 @@ describe('registerStationWorkspaceHandlers', () => {
         'Authorization: Bearer dtok_test:station-secret {"device_token_id":"dtok_test","device_token_secret":"station-secret"}'
       )
     )
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
@@ -402,11 +419,89 @@ describe('registerStationWorkspaceHandlers', () => {
         throw new Error('stringify failed')
       }
     })
-    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
     await expect(
       handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
     ).rejects.toThrow('[unprintable error]')
     expect(registerSshPtyProviderMock).not.toHaveBeenCalled()
+  })
+
+  it('save persists trimmed Station workspace records without credentials', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_717_171_717_000)
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    const result = await handlers.get('stationWorkspace:save')!(null, {
+      workspaceId: '  ws_123\n',
+      name: '  Expand Runtime  ',
+      repositoryDisplay: 'github.com/expandai/expand'
+    })
+
+    expect(upsertStationWorkspaceMock).toHaveBeenCalledWith({
+      workspaceId: 'ws_123',
+      name: 'Expand Runtime',
+      repositoryDisplay: 'github.com/expandai/expand',
+      addedAt: 1_717_171_717_000,
+      updatedAt: 1_717_171_717_000
+    })
+    expect(result).toEqual({
+      workspaceId: 'ws_123',
+      name: 'Expand Runtime',
+      repositoryDisplay: 'github.com/expandai/expand',
+      addedAt: 1_717_171_717_000,
+      updatedAt: 1_717_171_717_000
+    })
+    expect(JSON.stringify(result)).not.toContain('dtok_test')
+    expect(JSON.stringify(result)).not.toContain('station-secret')
+  })
+
+  it('list returns persisted Station workspace records sorted by updatedAt descending', async () => {
+    getStationWorkspacesMock.mockReturnValue([
+      {
+        workspaceId: 'ws_older',
+        name: 'Zulu',
+        repositoryDisplay: null,
+        addedAt: 100,
+        updatedAt: 100
+      },
+      {
+        workspaceId: 'ws_newer',
+        name: 'Alpha',
+        repositoryDisplay: 'github.com/expandai/expand',
+        addedAt: 200,
+        updatedAt: 300
+      }
+    ])
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    await expect(handlers.get('stationWorkspace:list')!(null, undefined)).resolves.toEqual([
+      {
+        workspaceId: 'ws_newer',
+        name: 'Alpha',
+        repositoryDisplay: 'github.com/expandai/expand',
+        addedAt: 200,
+        updatedAt: 300
+      },
+      {
+        workspaceId: 'ws_older',
+        name: 'Zulu',
+        repositoryDisplay: null,
+        addedAt: 100,
+        updatedAt: 100
+      }
+    ])
+  })
+
+  it('save rejects missing Station workspace ids', async () => {
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    await expect(
+      handlers.get('stationWorkspace:save')!(null, {
+        workspaceId: '  ',
+        name: '',
+        repositoryDisplay: null
+      })
+    ).rejects.toThrow('Station workspace id is required')
+    expect(upsertStationWorkspaceMock).not.toHaveBeenCalled()
   })
 })

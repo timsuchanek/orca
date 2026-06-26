@@ -967,6 +967,7 @@ function openMainWindow(): BrowserWindow {
         preserveAgentAuthBeforeRestart({ codexRuntimeHome, claudeRuntimeAuth, store })
     }
   )
+  registerStationWorkspaceHandlers(window, runtime, store)
   rateLimits.attach(window)
   // Why: quota probes can spawn CLIs and hit network. The attached show/focus
   // listeners refresh as soon as the window can present quota UI, so do not

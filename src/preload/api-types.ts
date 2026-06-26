@@ -3061,6 +3061,35 @@ export type PreloadApi = {
     onCredentialResolved: (callback: (data: { requestId: string }) => void) => () => void
     submitCredential: (args: { requestId: string; value: string | null }) => Promise<void>
   }
+  stationWorkspace: {
+    list: () => Promise<{
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+      addedAt: number
+      updatedAt: number
+    }[]>
+    save: (args: {
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+    }) => Promise<{
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+      addedAt: number
+      updatedAt: number
+    }>
+    remove: (args: { workspaceId: string }) => Promise<boolean>
+    attach: (args: { workspaceId: string }) => Promise<{
+      connectionId: string
+      workspaceId: string
+      name: string
+      repositoryDisplay?: string | null
+      cwd: string
+    }>
+    detach: (args: { workspaceId: string }) => Promise<void>
+  }
   automations: {
     list: () => Promise<Automation[]>
     listRuns: (args?: { automationId?: string }) => Promise<AutomationRun[]>
