@@ -320,7 +320,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isWebSocketUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.protocol === 'ws:' || url.protocol === 'wss:'
+    return (
+      (url.protocol === 'ws:' || url.protocol === 'wss:') &&
+      url.username.length === 0 &&
+      url.password.length === 0
+    )
   } catch {
     return false
   }
