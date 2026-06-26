@@ -315,7 +315,7 @@ export class StationPtyProvider implements IPtyProvider {
   }
 
   private async emitExitIfRemotePtyStopped(appId: string, ptyId: string): Promise<void> {
-    if (this.disposed || !this.trackedPtys.has(appId)) {
+    if (this.disposed || !this.trackedPtys.has(appId) || this.sockets.has(appId)) {
       return
     }
     let status: Awaited<ReturnType<StationClient['getPtyStatus']>>
@@ -326,6 +326,9 @@ export class StationPtyProvider implements IPtyProvider {
         id: appId,
         error: sanitizeStationPtyTransportError(error)
       })
+      return
+    }
+    if (this.disposed || !this.trackedPtys.has(appId) || this.sockets.has(appId)) {
       return
     }
     if (status.status !== 'exited' && status.status !== 'missing') {
