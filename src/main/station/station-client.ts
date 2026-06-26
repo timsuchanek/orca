@@ -124,7 +124,7 @@ export class StationClient {
       'POST',
       `/v1/workspaces/${encodeURIComponent(workspaceId)}/ptys`,
       request
-    )
+    ).then(validateCreatePtyResponse)
   }
 
   async resizePty(workspaceId: string, ptyId: string, cols: number, rows: number): Promise<void> {
@@ -245,6 +245,23 @@ function validatePtyStatusResponse(response: StationPtyStatusResponse): StationP
   }
   if (!['running', 'exited', 'missing'].includes(response.status)) {
     throw new Error('Station PTY status response had invalid status')
+  }
+  return response
+}
+
+function validateCreatePtyResponse(response: StationCreatePtyResponse): StationCreatePtyResponse {
+  if (
+    !isRecord(response) ||
+    !isRecord(response.pty) ||
+    typeof response.pty.pty_id !== 'string' ||
+    response.pty.pty_id.length === 0 ||
+    !Array.isArray(response.pty.argv) ||
+    typeof response.pty.cwd !== 'string'
+  ) {
+    throw new Error('Station create PTY response was invalid')
+  }
+  if (!isRecord(response.handle) || response.handle.pty_id !== response.pty.pty_id) {
+    throw new Error('Station create PTY response handle did not match pty')
   }
   return response
 }

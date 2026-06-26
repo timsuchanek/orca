@@ -151,6 +151,46 @@ describe('StationClient', () => {
     )
   })
 
+  it('rejects malformed create PTY responses', async () => {
+    fetchMock.mockResolvedValueOnce(okJsonResponse({ pty: {}, handle: { pty_id: 'pty_123' } }))
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        pty: {
+          workspace_id: 'ws_123',
+          pty_id: 'pty_123',
+          process_id: 'proc_123',
+          station_link: 'station://workspace/ws_123/pty/pty_123',
+          name: 'shell',
+          cwd: '/home/station/workspace',
+          argv: ['zsh'],
+          observed_status: 'running'
+        },
+        handle: {
+          pty_id: 'pty_other',
+          process_id: 'proc_123',
+          reused: false
+        }
+      })
+    )
+    const client = new StationClient({
+      baseUrl: 'http://127.0.0.1:18080',
+      bearerToken: 'dtok_test:secret'
+    })
+    const request: StationCreatePtyRequest = {
+      name: 'shell',
+      argv: ['zsh'],
+      rows: 40,
+      cols: 120
+    }
+
+    await expect(client.createPty('ws_123', request)).rejects.toThrow(
+      'Station create PTY response was invalid'
+    )
+    await expect(client.createPty('ws_123', request)).rejects.toThrow(
+      'Station create PTY response handle did not match pty'
+    )
+  })
+
   it('posts resize requests to the tracked PTY resize route', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
     const client = new StationClient({
