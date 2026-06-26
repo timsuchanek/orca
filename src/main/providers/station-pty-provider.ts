@@ -28,6 +28,7 @@ export class StationPtyProvider implements IPtyProvider {
   private sockets = new Map<string, StationWebSocket>()
   private trackedPtys = new Map<string, TrackedPty>()
   private pendingWrites = new Map<string, Promise<void>>()
+  private streamOpenGenerations = new Map<string, number>()
   private disposed = false
 
   constructor(
@@ -225,6 +226,7 @@ export class StationPtyProvider implements IPtyProvider {
     }
     this.disposed = true
     this.pendingWrites.clear()
+    this.streamOpenGenerations.clear()
     for (const socket of this.sockets.values()) {
       socket.close()
     }
@@ -272,10 +274,16 @@ export class StationPtyProvider implements IPtyProvider {
       throw new Error('Station PTY provider disposed')
     }
     const priorSocket = this.sockets.get(appId)
+    const generation = (this.streamOpenGenerations.get(appId) ?? 0) + 1
+    this.streamOpenGenerations.set(appId, generation)
     const socket = await this.client.openPtyStream(this.workspaceId, tracked.ptyId)
     if (this.disposed) {
       socket.close()
       throw new Error('Station PTY provider disposed')
+    }
+    if (this.streamOpenGenerations.get(appId) !== generation) {
+      socket.close()
+      throw new Error('Station PTY stream open superseded')
     }
     socket.on('message', (payload) => {
       if (this.disposed || this.sockets.get(appId) !== socket || !this.trackedPtys.has(appId)) {
@@ -353,6 +361,7 @@ export class StationPtyProvider implements IPtyProvider {
     const socket = this.sockets.get(appId)
     this.sockets.delete(appId)
     this.trackedPtys.delete(appId)
+    this.streamOpenGenerations.delete(appId)
     socket?.close()
   }
 

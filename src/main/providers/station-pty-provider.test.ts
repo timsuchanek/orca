@@ -498,6 +498,41 @@ describe('StationPtyProvider', () => {
     expect(socket.send).toHaveBeenCalledWith(Buffer.from('after-failed-reattach', 'utf8'))
   })
 
+  it('keeps the newest Station stream when concurrent reattach attempts resolve out of order', async () => {
+    const dataHandler = vi.fn()
+    provider.onData(dataHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const slowOpen = deferredPromise<StationWebSocket>()
+    const fastOpen = deferredPromise<StationWebSocket>()
+    const slowSocket = new FakeWebSocket()
+    const fastSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream)
+      .mockReturnValueOnce(slowOpen.promise)
+      .mockReturnValueOnce(fastOpen.promise)
+
+    const slowAttach = provider.attach(id)
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    const fastAttach = provider.attach(id)
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(3))
+
+    fastOpen.resolve(fastSocket)
+    await fastAttach
+    slowOpen.resolve(slowSocket)
+    await expect(slowAttach).rejects.toThrow('Station PTY stream open superseded')
+
+    expect(socket.close).toHaveBeenCalledTimes(1)
+    expect(slowSocket.close).toHaveBeenCalledTimes(1)
+    expect(fastSocket.close).not.toHaveBeenCalled()
+    slowSocket.emit('message', Buffer.from('slow-stale', 'utf8'), true)
+    fastSocket.emit('message', Buffer.from('fast-current', 'utf8'), true)
+    provider.write(id, 'after-concurrent-attach')
+
+    expect(dataHandler).toHaveBeenCalledTimes(1)
+    expect(dataHandler).toHaveBeenCalledWith({ id, data: 'fast-current' })
+    expect(fastSocket.send).toHaveBeenCalledWith(Buffer.from('after-concurrent-attach', 'utf8'))
+    expect(slowSocket.send).not.toHaveBeenCalled()
+  })
+
   it('ignores stale socket close events after reopen during explicit shutdown', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
