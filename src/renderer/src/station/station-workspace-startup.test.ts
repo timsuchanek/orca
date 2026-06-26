@@ -167,4 +167,31 @@ describe('rehydratePersistedStationWorkspaces', () => {
       failed: [{ workspaceId: 'ws_fail', message: 'attach failed' }]
     })
   })
+
+  it('reports list failures without throwing so startup can keep the station registration barrier explicit', async () => {
+    const list = vi.fn().mockRejectedValue(new Error('list failed'))
+    const attach = vi.fn()
+
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          list,
+          attach,
+          save: vi.fn(),
+          remove: vi.fn(),
+          detach: vi.fn()
+        }
+      }
+    })
+
+    const moduleUnderTest = await import('./station-workspace-startup')
+
+    await expect(moduleUnderTest.rehydratePersistedStationWorkspaces()).resolves.toEqual({
+      registered: [],
+      failed: [{ workspaceId: '*', message: 'list failed' }]
+    })
+
+    expect(attachStateMocks.upsertStationWorkspaceIntoRendererState).not.toHaveBeenCalled()
+    expect(attach).not.toHaveBeenCalled()
+  })
 })

@@ -9,7 +9,16 @@ export async function rehydratePersistedStationWorkspaces(): Promise<{
   registered: string[]
   failed: StationWorkspaceStartupFailure[]
 }> {
-  const persistedWorkspaces = await window.api.stationWorkspace.list()
+  let persistedWorkspaces: Awaited<ReturnType<typeof window.api.stationWorkspace.list>>
+  try {
+    persistedWorkspaces = await window.api.stationWorkspace.list()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      registered: [],
+      failed: [{ workspaceId: '*', message }]
+    }
+  }
   const results = await Promise.allSettled(
     persistedWorkspaces.map(async (workspace) => {
       try {
