@@ -142,7 +142,7 @@ export class StationClient {
     return this.requestJson<StationPtyStatusResponse>(
       'GET',
       this.ptyPath(workspaceId, ptyId, 'status')
-    )
+    ).then(validatePtyStatusResponse)
   }
 
   getPtyStreamInfo(workspaceId: string, ptyId: string): Promise<StationStreamInfo> {
@@ -237,6 +237,13 @@ function stationErrorMessage(error: unknown): string {
   } catch {
     return '[unprintable error]'
   }
+}
+
+function validatePtyStatusResponse(response: StationPtyStatusResponse): StationPtyStatusResponse {
+  if (!['running', 'exited', 'missing'].includes(response.status)) {
+    throw new Error('Station PTY status response had invalid status')
+  }
+  return response
 }
 
 function sanitizeStationErrorMessage(message: string, secrets: string[]): string {
