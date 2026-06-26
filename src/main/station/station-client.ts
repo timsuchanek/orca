@@ -160,12 +160,14 @@ export class StationClient {
     if (!isWebSocketUrl(info.url)) {
       throw new Error('Station PTY stream-info response had invalid websocket url')
     }
-    if (typeof info.bearer_token !== 'string' || info.bearer_token.trim().length === 0) {
+    const streamBearerToken =
+      typeof info.bearer_token === 'string' ? info.bearer_token.trim() : ''
+    if (streamBearerToken.length === 0) {
       throw new Error('Station PTY stream-info response missing bearer_token')
     }
     try {
       return new this.webSocketCtor(info.url, {
-        headers: { Authorization: `Bearer ${info.bearer_token}` }
+        headers: { Authorization: `Bearer ${streamBearerToken}` }
       })
     } catch (error) {
       const message = sanitizeStationErrorMessage(
