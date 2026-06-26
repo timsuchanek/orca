@@ -358,11 +358,40 @@ describe('StationPtyProvider', () => {
     expect(handler).toHaveBeenCalledWith({ id, data: 'hello from station' })
   })
 
+  it('stops forwarding Station output after a data listener unsubscribes', async () => {
+    const handler = vi.fn()
+    const unsubscribe = provider.onData(handler)
+    await provider.spawn({ cols: 80, rows: 24 })
+
+    unsubscribe()
+    socket.emit('message', Buffer.from('late-output', 'utf8'), true)
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
   it('registers replay listeners even though V0 does not emit replay frames', () => {
     const handler = vi.fn()
     const unsubscribe = provider.onReplay(handler)
 
     unsubscribe()
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('does not notify an unsubscribed exit listener', async () => {
+    const handler = vi.fn()
+    const unsubscribe = provider.onExit(handler)
+    await provider.spawn({ cols: 80, rows: 24 })
+    vi.mocked(client.getPtyStatus).mockResolvedValueOnce({
+      pty_id: 'pty_123',
+      status: 'exited',
+      exit_code: 17
+    })
+
+    unsubscribe()
+    socket.emit('close')
+    await Promise.resolve()
+    await Promise.resolve()
 
     expect(handler).not.toHaveBeenCalled()
   })
@@ -1095,6 +1124,21 @@ describe('StationPtyProvider', () => {
     await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
 
     await expect(provider.hasChildProcesses(id)).resolves.toBe(false)
+
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+  })
+
+  it('does not report a Station PTY as present while terminate is in flight', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+
+    expect(provider.hasPty(id)).toBe(false)
+    expect(provider.hasPty('pty_123')).toBe(false)
 
     closeRequest.resolve(undefined)
     await shutdownPromise

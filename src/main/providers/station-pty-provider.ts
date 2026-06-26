@@ -41,7 +41,8 @@ export class StationPtyProvider implements IPtyProvider {
   ) {}
 
   hasPty(id: string): boolean {
-    return this.trackedPtys.has(this.toAppPtyId(this.toRawPtyId(id)))
+    const appId = this.toAppPtyId(this.toRawPtyId(id))
+    return this.trackedPtys.has(appId) && !this.terminatingPtys.has(appId)
   }
 
   async spawn(opts: PtySpawnOptions): Promise<PtySpawnResult> {
