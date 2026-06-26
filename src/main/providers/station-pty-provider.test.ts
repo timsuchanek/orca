@@ -164,6 +164,13 @@ describe('StationPtyProvider', () => {
     })
   })
 
+  it('reports tracked Station PTYs from raw and app-facing identifiers', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(provider.hasPty(id)).toBe(true)
+    expect(provider.hasPty('pty_123')).toBe(true)
+  })
+
   it('writes bytes over the Station WebSocket', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
 
@@ -267,6 +274,23 @@ describe('StationPtyProvider', () => {
     provider.write(id, 'late write')
     await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
     await provider.shutdown(id, { immediate: false })
+    reconnect.resolve(reopenedSocket)
+    await vi.waitFor(() => expect(reopenedSocket.close).toHaveBeenCalledTimes(1))
+
+    expect(reopenedSocket.send).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
+  it('drops queued writes when provider is disposed before reconnect completes', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    socket.readyState = 0
+    const reconnect = deferredPromise<StationWebSocket>()
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockReturnValueOnce(reconnect.promise)
+
+    provider.write(id, 'late write')
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    provider.dispose()
     reconnect.resolve(reopenedSocket)
     await vi.waitFor(() => expect(reopenedSocket.close).toHaveBeenCalledTimes(1))
 
