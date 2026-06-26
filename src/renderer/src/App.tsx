@@ -177,6 +177,7 @@ import {
   hasRequestedBackgroundTerminalWorktreeMount,
   subscribeBackgroundTerminalWorktreeMountRequests
 } from './components/terminal/background-terminal-worktree-mount'
+import { rehydratePersistedStationWorkspaces } from './station/station-workspace-startup'
 
 // Why: agents alive during a hard kill (crash, forced update install) need a
 // reasonably fresh resume record on disk; one minute bounds the lost window
@@ -1092,6 +1093,8 @@ function App(): React.JSX.Element {
           } else {
             logRendererStartupDiagnostic('ssh-reconnect-skipped', { connectionIds: 0 })
           }
+
+          await rehydratePersistedStationWorkspaces()
 
           // Why: main overlaps daemon/hook startup with renderer hydration for
           // first paint, but restored terminals still need those services ready

@@ -72,6 +72,17 @@ describe('renderer startup runtime routing', () => {
     expect(servicesIndex).toBeLessThan(reconnectIndex)
   })
 
+  it('rehydrates persisted Station workspaces before startup services and terminal reconnect', () => {
+    const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
+    const stationRehydrateIndex = source.indexOf('await rehydratePersistedStationWorkspaces()')
+    const servicesIndex = source.indexOf('await window.api.app.awaitFirstWindowStartupServices()')
+    const reconnectIndex = source.indexOf('await actions.reconnectPersistedTerminals')
+
+    expect(stationRehydrateIndex).toBeGreaterThanOrEqual(0)
+    expect(stationRehydrateIndex).toBeLessThan(servicesIndex)
+    expect(stationRehydrateIndex).toBeLessThan(reconnectIndex)
+  })
+
   it('does not eagerly import the floating terminal panel on startup', () => {
     const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
 
