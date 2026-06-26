@@ -43,12 +43,12 @@ export class StationPtyProvider implements IPtyProvider {
   async spawn(opts: PtySpawnOptions): Promise<PtySpawnResult> {
     if (opts.sessionId) {
       const appId = this.toAppPtyId(this.toRawPtyId(opts.sessionId))
-      this.trackPty(appId, {
+      const tracked = {
         ptyId: this.toRawPtyId(opts.sessionId),
         cwd: opts.cwd ?? this.trackedPtys.get(appId)?.cwd ?? DEFAULT_CWD,
         title: this.trackedPtys.get(appId)?.title ?? 'orca-shell'
-      })
-      await this.openStream(appId)
+      }
+      await this.openAndTrackPty(appId, tracked)
       return {
         id: appId,
         pid: null,
@@ -88,11 +88,13 @@ export class StationPtyProvider implements IPtyProvider {
     const rawPtyId = this.toRawPtyId(id)
     const appId = this.toAppPtyId(rawPtyId)
     if (!this.trackedPtys.has(appId)) {
-      this.trackPty(appId, {
+      const tracked = {
         ptyId: rawPtyId,
         cwd: DEFAULT_CWD,
         title: 'orca-shell'
-      })
+      }
+      await this.openAndTrackPty(appId, tracked)
+      return
     }
     await this.openStream(appId)
   }
@@ -172,14 +174,22 @@ export class StationPtyProvider implements IPtyProvider {
         `Station PTY state belongs to workspace "${parsed.workspaceId}", expected "${this.workspaceId}"`
       )
     }
-    for (const entry of parsed.ptys ?? []) {
-      const appId = this.toAppPtyId(entry.ptyId)
-      this.trackPty(appId, {
-        ptyId: entry.ptyId,
-        cwd: entry.cwd || DEFAULT_CWD,
-        title: entry.title || 'orca-shell'
-      })
-      await this.openStream(appId)
+    const revivedAppIds: string[] = []
+    try {
+      for (const entry of parsed.ptys ?? []) {
+        const appId = this.toAppPtyId(entry.ptyId)
+        await this.openAndTrackPty(appId, {
+          ptyId: entry.ptyId,
+          cwd: entry.cwd || DEFAULT_CWD,
+          title: entry.title || 'orca-shell'
+        })
+        revivedAppIds.push(appId)
+      }
+    } catch (error) {
+      for (const appId of revivedAppIds) {
+        this.detachLocalPty(appId)
+      }
+      throw error
     }
   }
 
@@ -248,6 +258,11 @@ export class StationPtyProvider implements IPtyProvider {
       throw new Error(`Unknown Station PTY "${appId}"`)
     }
     return tracked
+  }
+
+  private async openAndTrackPty(appId: string, tracked: TrackedPty): Promise<void> {
+    await this.openStream(appId, tracked)
+    this.trackPty(appId, tracked)
   }
 
   private async openStream(appId: string, tracked = this.requireTrackedPty(appId)): Promise<void> {

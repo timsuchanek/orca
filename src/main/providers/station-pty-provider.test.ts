@@ -453,6 +453,16 @@ describe('StationPtyProvider', () => {
     ])
   })
 
+  it('does not track an untracked PTY when attach cannot open its Station stream', async () => {
+    const id = 'ssh:station%3Aws_123@@pty_unreachable'
+    vi.mocked(client.openPtyStream).mockRejectedValueOnce(new Error('station is asleep'))
+
+    await expect(provider.attach(id)).rejects.toThrow('station is asleep')
+
+    expect(provider.hasPty(id)).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('ignores stale socket close events after reopen during explicit shutdown', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
@@ -543,6 +553,27 @@ describe('StationPtyProvider', () => {
     ])
     expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_123')
     expect(client.openPtyStream).toHaveBeenCalledWith('ws_123', 'pty_456')
+  })
+
+  it('rolls back revived PTY state when one persisted stream cannot reopen', async () => {
+    const state = JSON.stringify({
+      workspaceId: 'ws_123',
+      ptys: [
+        { ptyId: 'pty_restore_1', cwd: '/tmp/one', title: 'one' },
+        { ptyId: 'pty_restore_2', cwd: '/tmp/two', title: 'two' }
+      ]
+    })
+    const firstSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream)
+      .mockResolvedValueOnce(firstSocket)
+      .mockRejectedValueOnce(new Error('second stream failed'))
+
+    await expect(provider.revive(state)).rejects.toThrow('second stream failed')
+
+    expect(firstSocket.close).toHaveBeenCalledTimes(1)
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_1')).toBe(false)
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_restore_2')).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
   })
 
   it('returns shell metadata and no-op behaviors required by the provider interface', async () => {
