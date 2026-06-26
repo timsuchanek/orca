@@ -58,10 +58,11 @@ function createDeferredPromise(): {
 export function awaitStationProviderStartup(
   connectionId: string | null | undefined
 ): Promise<void> | undefined {
-  if (!isStationConnectionId(connectionId)) {
+  const normalizedConnectionId = connectionId?.trim()
+  if (!normalizedConnectionId || !isStationConnectionId(normalizedConnectionId)) {
     return undefined
   }
-  return stationProviderStartupByConnectionId.get(connectionId)
+  return stationProviderStartupByConnectionId.get(normalizedConnectionId)
 }
 
 export function wireStationPtyEvents(args: {

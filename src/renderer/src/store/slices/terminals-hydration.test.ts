@@ -106,6 +106,7 @@ import {
   TEST_REPO
 } from './store-test-helpers'
 import { canGoBackWorktreeHistory } from './worktree-nav-history'
+import { upsertStationWorkspaceState } from './worktrees'
 
 describe('hydrateWorkspaceSession', () => {
   beforeEach(() => {
@@ -457,6 +458,47 @@ describe('hydrateWorkspaceSession', () => {
     expect(store.getState().deferredSshSessionIdsByTabId).toMatchObject({
       'tab-1': sshSessionId
     })
+  })
+
+  it('reconnects a restored Station tab after startup registers its synthetic workspace without opening a duplicate tab', async () => {
+    const store = createTestStore()
+    const workspaceId = 'ws_123'
+    const repoId = stationConnectionId(workspaceId)
+    const worktreeId = `station://workspace/${workspaceId}`
+
+    const session: WorkspaceSessionState = {
+      activeRepoId: repoId,
+      activeWorktreeId: worktreeId,
+      activeTabId: 'tab-1',
+      tabsByWorktree: {
+        [worktreeId]: [makeTab({ id: 'tab-1', worktreeId, ptyId: 'station-session-1' })]
+      },
+      terminalLayoutsByTabId: {
+        'tab-1': makeLayout()
+      },
+      activeWorktreeIdsOnShutdown: [worktreeId]
+    }
+
+    store.getState().hydrateWorkspaceSession(session)
+
+    const registered = upsertStationWorkspaceState(store.getState(), {
+      workspaceId,
+      name: 'Station Workspace'
+    })
+    store.setState({
+      repos: registered.repos,
+      worktreesByRepo: registered.worktreesByRepo
+    })
+
+    await store.getState().reconnectPersistedTerminals()
+
+    expect(store.getState().tabsByWorktree[worktreeId]).toEqual([
+      expect.objectContaining({ id: 'tab-1', ptyId: 'station-session-1' })
+    ])
+    expect(store.getState().tabsByWorktree[worktreeId]).toHaveLength(1)
+    expect(store.getState().ptyIdsByTabId['tab-1']).toEqual(['station-session-1'])
+    expect(store.getState().deferredSshSessionIdsByTabId).toEqual({})
+    expect(store.getState().workspaceSessionReady).toBe(true)
   })
 
   it('resets persisted agent titles to the fallback label on hydration', () => {
