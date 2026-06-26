@@ -939,6 +939,29 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('closes a newly-created Station PTY when provider is disposed before create completes', async () => {
+    const createRequest = deferredPromise<Awaited<ReturnType<StationClient['createPty']>>>()
+    vi.mocked(client.createPty).mockReturnValueOnce(createRequest.promise)
+
+    const spawnPromise = provider.spawn({ cols: 80, rows: 24 })
+    await vi.waitFor(() => expect(client.createPty).toHaveBeenCalledTimes(1))
+    provider.dispose()
+    createRequest.resolve({
+      pty: trackedPty(),
+      handle: {
+        pty_id: 'pty_123',
+        process_id: '456',
+        reused: false
+      }
+    })
+
+    await expect(spawnPromise).rejects.toThrow('Station PTY provider disposed')
+    expect(client.openPtyStream).not.toHaveBeenCalled()
+    expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(provider.hasPty('ssh:station%3Aws_123@@pty_123')).toBe(false)
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('returns shell metadata and no-op behaviors required by the provider interface', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
 
