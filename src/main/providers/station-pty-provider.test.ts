@@ -148,6 +148,36 @@ describe('StationPtyProvider', () => {
     expect(result.pid).toBeNull()
   })
 
+  it('returns null pid when Station process ids are not positive integers', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: trackedPty({ process_id: '-1' }),
+      handle: {
+        pty_id: 'pty_123',
+        process_id: '-1',
+        reused: false
+      }
+    })
+
+    const negative = await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(negative.pid).toBeNull()
+
+    const secondSocket = new FakeWebSocket()
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: trackedPty({ pty_id: 'pty_zero', process_id: '0' }),
+      handle: {
+        pty_id: 'pty_zero',
+        process_id: '0',
+        reused: false
+      }
+    })
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(secondSocket)
+
+    const zero = await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(zero.pid).toBeNull()
+  })
+
   it('returns null pid when Station create response omits handle metadata', async () => {
     vi.mocked(client.createPty).mockResolvedValueOnce({
       pty: trackedPty()

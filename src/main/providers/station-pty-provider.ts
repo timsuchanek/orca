@@ -529,11 +529,11 @@ function parseStationPid(processId: unknown): number | null {
   if (typeof processId !== 'string') {
     return null
   }
-  if (!/^-?\d+$/.test(processId)) {
+  if (!/^\d+$/.test(processId)) {
     return null
   }
   const pid = Number(processId)
-  return Number.isSafeInteger(pid) ? pid : null
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null
 }
 
 function decodeStationMessage(payload: unknown, decoder: TextDecoder): string | null {
