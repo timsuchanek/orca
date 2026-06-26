@@ -199,7 +199,10 @@ export class StationPtyProvider implements IPtyProvider {
   async serialize(ids: string[]): Promise<string> {
     const ptys = ids
       .map((id) => {
-        const appId = this.toAppPtyId(this.toRawPtyId(id))
+        const appId = this.tryAppPtyId(id)
+        if (appId === null) {
+          return undefined
+        }
         if (this.terminatingPtys.has(appId)) {
           return undefined
         }
@@ -290,6 +293,14 @@ export class StationPtyProvider implements IPtyProvider {
 
   private toAppPtyId(ptyId: string): string {
     return toAppSshPtyId(this.connectionId, ptyId)
+  }
+
+  private tryAppPtyId(id: string): string | null {
+    try {
+      return this.toAppPtyId(this.toRawPtyId(id))
+    } catch {
+      return null
+    }
   }
 
   private trackPty(appId: string, tracked: TrackedPty): void {

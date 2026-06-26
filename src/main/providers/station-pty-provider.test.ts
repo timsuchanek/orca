@@ -681,6 +681,28 @@ describe('StationPtyProvider', () => {
     })
   })
 
+  it('ignores foreign and stale PTY ids while serializing pane state', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+
+    const state = await provider.serialize([
+      id,
+      'local-pty-1',
+      'ssh:station%3Aws_other@@pty_foreign',
+      'ssh:station%3Aws_123@@pty_missing'
+    ])
+
+    expect(JSON.parse(state)).toEqual({
+      workspaceId: 'ws_123',
+      ptys: [
+        {
+          ptyId: 'pty_123',
+          cwd: '/tmp/one',
+          title: 'orca-shell'
+        }
+      ]
+    })
+  })
+
   it('ignores attach while explicit terminate is in flight', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
     const closeRequest = deferredPromise<void>()
