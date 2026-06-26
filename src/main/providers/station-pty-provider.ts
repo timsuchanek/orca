@@ -41,7 +41,12 @@ export class StationPtyProvider implements IPtyProvider {
   ) {}
 
   hasPty(id: string): boolean {
-    const appId = this.toAppPtyId(this.toRawPtyId(id))
+    let appId: string
+    try {
+      appId = this.toAppPtyId(this.toRawPtyId(id))
+    } catch {
+      return false
+    }
     return this.trackedPtys.has(appId) && !this.terminatingPtys.has(appId)
   }
 

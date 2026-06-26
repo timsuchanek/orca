@@ -171,6 +171,13 @@ describe('StationPtyProvider', () => {
     expect(provider.hasPty('pty_123')).toBe(true)
   })
 
+  it('does not throw while probing PTYs from another connection', async () => {
+    await provider.spawn({ cols: 80, rows: 24 })
+
+    expect(() => provider.hasPty('ssh:station%3Aws_other@@pty_123')).not.toThrow()
+    expect(provider.hasPty('ssh:station%3Aws_other@@pty_123')).toBe(false)
+  })
+
   it('writes bytes over the Station WebSocket', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
 
