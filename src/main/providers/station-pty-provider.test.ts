@@ -366,6 +366,20 @@ describe('StationPtyProvider', () => {
     expect(client.openPtyStream).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores resize while explicit terminate is in flight', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const closeRequest = deferredPromise<void>()
+    vi.mocked(client.closePty).mockReturnValueOnce(closeRequest.promise)
+
+    const shutdownPromise = provider.shutdown(id, { immediate: true })
+    await vi.waitFor(() => expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123'))
+    provider.resize(id, 132, 55)
+    closeRequest.resolve(undefined)
+    await shutdownPromise
+
+    expect(client.resizePty).not.toHaveBeenCalled()
+  })
+
   it('ignores remote exit status that resolves after local detach', async () => {
     const handler = vi.fn()
     provider.onExit(handler)

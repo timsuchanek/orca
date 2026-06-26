@@ -116,6 +116,9 @@ export class StationPtyProvider implements IPtyProvider {
 
   resize(id: string, cols: number, rows: number): void {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
+    if (this.terminatingPtys.has(appId)) {
+      return
+    }
     const ptyId = this.requireTrackedPty(appId).ptyId
     void this.client.resizePty(this.workspaceId, ptyId, cols, rows).catch((error) => {
       console.error('[station-pty] resize failed', error)
