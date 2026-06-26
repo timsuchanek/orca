@@ -177,7 +177,7 @@ import {
   hasRequestedBackgroundTerminalWorktreeMount,
   subscribeBackgroundTerminalWorktreeMountRequests
 } from './components/terminal/background-terminal-worktree-mount'
-import { rehydratePersistedStationWorkspaces } from './station/station-workspace-startup'
+import { restorePersistedStationWorkspaceTerminals } from './station/station-workspace-startup'
 
 // Why: agents alive during a hard kill (crash, forced update install) need a
 // reasonably fresh resume record on disk; one minute bounds the lost window
@@ -1094,18 +1094,8 @@ function App(): React.JSX.Element {
             logRendererStartupDiagnostic('ssh-reconnect-skipped', { connectionIds: 0 })
           }
 
-          await rehydratePersistedStationWorkspaces()
-
-          // Why: main overlaps daemon/hook startup with renderer hydration for
-          // first paint, but restored terminals still need those services ready
-          // before they mount and spawn/reconnect PTYs.
-          await timeRendererStartupStep('first-window-services-await', () =>
-            window.api.app.awaitFirstWindowStartupServices()
-          )
           reconnectStarted = true
-          await timeRendererStartupStep('reconnect-terminals', () =>
-            actions.reconnectPersistedTerminals(abortController.signal)
-          )
+          await restorePersistedStationWorkspaceTerminals(abortController.signal)
           syncZoomCSSVar()
           // Why (issue #1158): unlock the debounced session writer only after
           // hydration AND all dependent startup steps (SSH reconnect, terminal

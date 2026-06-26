@@ -73,14 +73,24 @@ describe('renderer startup runtime routing', () => {
   })
 
   it('rehydrates persisted Station workspaces before startup services and terminal reconnect', () => {
-    const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
-    const stationRehydrateIndex = source.indexOf('await rehydratePersistedStationWorkspaces()')
-    const servicesIndex = source.indexOf('await window.api.app.awaitFirstWindowStartupServices()')
-    const reconnectIndex = source.indexOf('await actions.reconnectPersistedTerminals')
+    const appSource = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
+    const startupSource = readFileSync(
+      join(process.cwd(), 'src/renderer/src/station/station-workspace-startup.ts'),
+      'utf8'
+    )
+    const helperCallIndex = appSource.indexOf(
+      'await restorePersistedStationWorkspaceTerminals(abortController.signal)'
+    )
+    const hydrationSucceededIndex = appSource.indexOf('actions.setHydrationSucceeded(true)')
+    const stationRehydrateIndex = startupSource.indexOf('await rehydratePersistedStationWorkspaces()')
+    const servicesIndex = startupSource.indexOf('await window.api.app.awaitFirstWindowStartupServices()')
+    const reconnectIndex = startupSource.indexOf('await useAppStore.getState().reconnectPersistedTerminals')
 
+    expect(helperCallIndex).toBeGreaterThanOrEqual(0)
+    expect(helperCallIndex).toBeLessThan(hydrationSucceededIndex)
     expect(stationRehydrateIndex).toBeGreaterThanOrEqual(0)
     expect(stationRehydrateIndex).toBeLessThan(servicesIndex)
-    expect(stationRehydrateIndex).toBeLessThan(reconnectIndex)
+    expect(servicesIndex).toBeLessThan(reconnectIndex)
   })
 
   it('does not eagerly import the floating terminal panel on startup', () => {

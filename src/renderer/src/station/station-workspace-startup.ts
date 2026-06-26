@@ -1,4 +1,5 @@
 import { upsertStationWorkspaceIntoRendererState } from './station-workspace-attach'
+import { useAppStore } from '@/store'
 
 type StationWorkspaceStartupFailure = {
   workspaceId: string
@@ -62,4 +63,12 @@ export async function rehydratePersistedStationWorkspaces(): Promise<{
   }
 
   return { registered, failed }
+}
+
+export async function restorePersistedStationWorkspaceTerminals(
+  signal?: AbortSignal
+): Promise<void> {
+  await rehydratePersistedStationWorkspaces()
+  await window.api.app.awaitFirstWindowStartupServices()
+  await useAppStore.getState().reconnectPersistedTerminals(signal)
 }
