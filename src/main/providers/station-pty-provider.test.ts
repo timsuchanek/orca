@@ -289,6 +289,24 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
+  it('ignores stale error events from a replaced Station stream', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSocket)
+
+    await provider.attach(id)
+    socket.emit('error', new Error('stale stream failed'))
+    reopenedSocket.emit('error', new Error('current stream failed'))
+
+    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(consoleError).toHaveBeenCalledWith(
+      '[station-pty] stream transport error',
+      expect.objectContaining({ id, error: 'current stream failed' })
+    )
+    consoleError.mockRestore()
+  })
+
   it('ignores stale data events from a replaced Station stream', async () => {
     const dataHandler = vi.fn()
     provider.onData(dataHandler)

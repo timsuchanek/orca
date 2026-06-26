@@ -377,6 +377,9 @@ export class StationPtyProvider implements IPtyProvider {
       }
     })
     socket.on('error', (error) => {
+      if (this.disposed || this.sockets.get(appId) !== socket || !this.trackedPtys.has(appId)) {
+        return
+      }
       console.error('[station-pty] stream transport error', {
         id: appId,
         error: sanitizeStationPtyTransportError(error)
