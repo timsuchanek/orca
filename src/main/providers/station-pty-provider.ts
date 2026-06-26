@@ -172,8 +172,8 @@ export class StationPtyProvider implements IPtyProvider {
 
   acknowledgeDataEvent(_id: string, _charCount: number): void {}
 
-  async hasChildProcesses(_id: string): Promise<boolean> {
-    return true
+  async hasChildProcesses(id: string): Promise<boolean> {
+    return this.trackedPtys.has(this.toAppPtyId(this.toRawPtyId(id)))
   }
 
   async getForegroundProcess(_id: string): Promise<string | null> {

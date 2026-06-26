@@ -992,6 +992,14 @@ describe('StationPtyProvider', () => {
     await expect(provider.getProfiles()).resolves.toEqual([])
   })
 
+  it('does not report child processes for detached Station PTYs', async () => {
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+
+    await provider.shutdown(id, { immediate: false })
+
+    await expect(provider.hasChildProcesses(id)).resolves.toBe(false)
+  })
+
   it('rejects PTY signals in v0', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
 
