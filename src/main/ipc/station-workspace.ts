@@ -181,7 +181,7 @@ export function registerStationWorkspaceHandlers(
 
   ipcMain.handle('stationWorkspace:list', async () => {
     const records = requireStationWorkspaceStore(store).getStationWorkspaces()
-    return records.sort(compareStationWorkspaceRecords)
+    return records.map(sanitizeStationWorkspaceRecord).sort(compareStationWorkspaceRecords)
   })
 
   ipcMain.handle('stationWorkspace:save', async (_event, rawArgs: unknown) => {
@@ -277,6 +277,16 @@ function compareStationWorkspaceRecords(
     return right.updatedAt - left.updatedAt
   }
   return left.name.localeCompare(right.name)
+}
+
+function sanitizeStationWorkspaceRecord(record: StationWorkspaceRecord): StationWorkspaceRecord {
+  return {
+    workspaceId: record.workspaceId,
+    name: record.name,
+    repositoryDisplay: record.repositoryDisplay,
+    addedAt: record.addedAt,
+    updatedAt: record.updatedAt
+  }
 }
 
 function sanitizeStationAttachError(error: unknown, knownSecrets: string[]): Error {

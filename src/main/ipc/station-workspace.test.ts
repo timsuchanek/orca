@@ -492,6 +492,34 @@ describe('registerStationWorkspaceHandlers', () => {
     ])
   })
 
+  it('list strips extra credential-like fields from persisted Station workspace records', async () => {
+    getStationWorkspacesMock.mockReturnValue([
+      {
+        workspaceId: 'ws_123',
+        name: 'Expand Runtime',
+        repositoryDisplay: 'github.com/expandai/expand',
+        addedAt: 100,
+        updatedAt: 200,
+        bearerToken: 'secret-token',
+        deviceTokenSecret: 'secret-value',
+        credentials: {
+          token: 'nested-secret'
+        }
+      }
+    ])
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+
+    await expect(handlers.get('stationWorkspace:list')!(null, undefined)).resolves.toEqual([
+      {
+        workspaceId: 'ws_123',
+        name: 'Expand Runtime',
+        repositoryDisplay: 'github.com/expandai/expand',
+        addedAt: 100,
+        updatedAt: 200
+      }
+    ])
+  })
+
   it('save rejects missing Station workspace ids', async () => {
     registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
 
