@@ -116,15 +116,15 @@ export class StationPtyProvider implements IPtyProvider {
   async shutdown(id: string, opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
     const appId = this.toAppPtyId(this.toRawPtyId(id))
     const tracked = this.requireTrackedPty(appId)
-    const socket = this.sockets.get(appId)
-    this.sockets.delete(appId)
-    this.trackedPtys.delete(appId)
-    socket?.close()
 
     if (opts.immediate) {
       await this.client.closePty(this.workspaceId, tracked.ptyId)
+      this.detachLocalPty(appId)
       this.emitExit({ id: appId, code: 0 })
+      return
     }
+
+    this.detachLocalPty(appId)
   }
 
   async sendSignal(_id: string, _signal: string): Promise<void> {
@@ -315,6 +315,13 @@ export class StationPtyProvider implements IPtyProvider {
     for (const callback of this.exitListeners) {
       callback(payload)
     }
+  }
+
+  private detachLocalPty(appId: string): void {
+    const socket = this.sockets.get(appId)
+    this.sockets.delete(appId)
+    this.trackedPtys.delete(appId)
+    socket?.close()
   }
 }
 

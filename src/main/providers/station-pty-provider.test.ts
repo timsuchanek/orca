@@ -266,7 +266,7 @@ describe('StationPtyProvider', () => {
     expect(exitHandler).toHaveBeenCalledWith({ id: first.id, code: 0 })
   })
 
-  it('preserves tracked state and suppresses exit when immediate remote close fails', async () => {
+  it('keeps the PTY retryable when immediate remote close fails', async () => {
     const exitHandler = vi.fn()
     provider.onExit(exitHandler)
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
@@ -275,9 +275,19 @@ describe('StationPtyProvider', () => {
 
     await expect(provider.shutdown(id, { immediate: true })).rejects.toThrow('close failed')
 
+    expect(socket.close).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([
+      { id, cwd: '/tmp/one', title: 'orca-shell' }
+    ])
+    expect(exitHandler).not.toHaveBeenCalled()
+
+    await provider.shutdown(id, { immediate: true })
+
+    expect(client.closePty).toHaveBeenNthCalledWith(1, 'ws_123', 'pty_123')
+    expect(client.closePty).toHaveBeenNthCalledWith(2, 'ws_123', 'pty_123')
     expect(socket.close).toHaveBeenCalledTimes(1)
     expect(await provider.listProcesses()).toEqual([])
-    expect(exitHandler).not.toHaveBeenCalled()
+    expect(exitHandler).toHaveBeenCalledWith({ id, code: 0 })
   })
 
   it('attach reopens a Station stream for an untracked Station app PTY id', async () => {

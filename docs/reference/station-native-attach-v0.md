@@ -19,6 +19,8 @@ Attach Station Workspace -> ws_...
 
 Orca creates a terminal-only synthetic worktree. New terminal tabs and split panes in that worktree create separate Station PTYs inside `/home/station/workspace`.
 
+Closing a Station-backed Orca pane detaches Orca locally and leaves the Station PTY running. An explicit kill action terminates the Station PTY by calling Station's PTY terminate endpoint.
+
 ## Current Scope
 
 V0 is intentionally terminal-only:
