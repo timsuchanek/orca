@@ -34,6 +34,12 @@ class ThrowingWebSocket {
   }
 }
 
+class TokenLeakingWebSocket {
+  constructor() {
+    throw new Error('failed with stream-secret-token')
+  }
+}
+
 const ORIGINAL_FETCH = globalThis.fetch
 
 function okJsonResponse(value: unknown): Response {
@@ -393,6 +399,24 @@ describe('StationClient', () => {
 
     expect(FakeWebSocket.instances[0]?.options?.headers?.Authorization).toBe(
       'Bearer stream-secret-token'
+    )
+  })
+
+  it('redacts trimmed stream-info bearer tokens from WebSocket construction errors', async () => {
+    fetchMock.mockResolvedValueOnce(
+      okJsonResponse({
+        url: 'ws://127.0.0.1:18080/v1/pty/pty_123/stream',
+        bearer_token: '  stream-secret-token\n'
+      })
+    )
+    const client = new StationClient({
+      baseUrl: 'http://127.0.0.1:18080',
+      bearerToken: 'dtok_test:secret',
+      WebSocketCtor: TokenLeakingWebSocket as unknown as StationWebSocketConstructor
+    })
+
+    await expect(client.openPtyStream('ws_123', 'pty_123')).rejects.toThrow(
+      'Station PTY stream open failed: failed with [REDACTED]'
     )
   })
 

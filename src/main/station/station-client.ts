@@ -172,7 +172,7 @@ export class StationClient {
     } catch (error) {
       const message = sanitizeStationErrorMessage(
         stationErrorMessage(error),
-        [this.opts.bearerToken, info.bearer_token]
+        [this.opts.bearerToken, info.bearer_token, streamBearerToken]
       )
       throw new Error(`Station PTY stream open failed: ${message}`)
     }
