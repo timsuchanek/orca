@@ -383,6 +383,26 @@ describe('registerStationWorkspaceHandlers', () => {
     expect(unregisterSshPtyProviderMock).not.toHaveBeenCalled()
   })
 
+  it('tears down an active Station provider even when persisted record removal fails', async () => {
+    removeStationWorkspaceMock.mockImplementation(() => {
+      throw new Error('remove failed')
+    })
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)
+    await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+
+    const provider = latestProvider()
+    const disposeSpy = vi.spyOn(provider, 'dispose')
+
+    await expect(
+      handlers.get('stationWorkspace:detach')!(null, { workspaceId: 'ws_123' })
+    ).rejects.toThrow('remove failed')
+
+    expect(unregisterSshPtyProviderMock).toHaveBeenCalledWith(stationConnectionId('ws_123'))
+    expect(disposeSpy).toHaveBeenCalledTimes(1)
+    expect(clearProviderPtyStateMock).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1')
+    expect(deletePtyOwnershipMock).toHaveBeenCalledWith('ssh:station%3Aws_123@@pty_1')
+  })
+
   it('detaches and unregisters when active Station PTY listing fails', async () => {
     stationListProcessesMock.mockRejectedValueOnce(new Error('station list failed'))
     registerStationWorkspaceHandlers(mainWindow as never, runtime as never, store as never)

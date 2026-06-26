@@ -213,9 +213,17 @@ export function registerStationWorkspaceHandlers(
 
   ipcMain.handle('stationWorkspace:detach', async (_event, rawArgs: unknown) => {
     const { workspaceId } = parseWorkspaceArgs(rawArgs)
-    requireStationWorkspaceStore(store).removeStationWorkspace(workspaceId)
+    let removalError: unknown = null
+    try {
+      requireStationWorkspaceStore(store).removeStationWorkspace(workspaceId)
+    } catch (error) {
+      removalError = error
+    }
     const active = activeStationWorkspaces.get(workspaceId)
     if (!active) {
+      if (removalError) {
+        throw removalError
+      }
       return
     }
     try {
@@ -232,6 +240,9 @@ export function registerStationWorkspaceHandlers(
       unregisterSshPtyProvider(active.connectionId)
       active.provider.dispose()
       activeStationWorkspaces.delete(workspaceId)
+    }
+    if (removalError) {
+      throw removalError
     }
   })
 

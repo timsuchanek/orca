@@ -179,6 +179,8 @@ import {
 } from './components/terminal/background-terminal-worktree-mount'
 import {
   hydratePersistedStationWorkspaceState,
+  listPersistedStationWorkspaces,
+  logStationStartupFailures,
   restorePersistedStationWorkspaceTerminals
 } from './station/station-workspace-startup'
 import { isStationConnectionId } from '../../shared/station-connection-id'
@@ -970,7 +972,12 @@ function App(): React.JSX.Element {
         )
         await keybindingsPromise
         if (!cancelled) {
-          await hydratePersistedStationWorkspaceState()
+          const stationWorkspaces = await listPersistedStationWorkspaces()
+          logStationStartupFailures(stationWorkspaces.failed)
+          const stationStateHydration = await hydratePersistedStationWorkspaceState(
+            stationWorkspaces.workspaces
+          )
+          logStationStartupFailures(stationStateHydration.failed)
           const sessionHydrationOptions = {
             additionalValidWorkspaceKeys: collectFolderWorkspaceKeysFromSession(sessionRead.session)
           }
@@ -1103,6 +1110,8 @@ function App(): React.JSX.Element {
           }
 
           await restorePersistedStationWorkspaceTerminals(abortController.signal, {
+            prelistedWorkspaces: stationWorkspaces.workspaces,
+            rendererStateHydrated: true,
             onBeforeReconnect: () => {
               reconnectStarted = true
             }

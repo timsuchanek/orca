@@ -78,14 +78,14 @@ describe('renderer startup runtime routing', () => {
       join(process.cwd(), 'src/renderer/src/station/station-workspace-startup.ts'),
       'utf8'
     )
-    const stateHydrateIndex = appSource.indexOf('await hydratePersistedStationWorkspaceState()')
+    const stateHydrateIndex = appSource.indexOf('await hydratePersistedStationWorkspaceState(')
     const workspaceHydrateIndex = appSource.indexOf('actions.hydrateWorkspaceSession(session)')
     const tabsHydrateIndex = appSource.indexOf('actions.hydrateTabsSession(session)')
     const helperCallIndex = appSource.indexOf(
       'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
     )
     const hydrationSucceededIndex = appSource.indexOf('actions.setHydrationSucceeded(true)')
-    const stationRehydrateIndex = startupSource.indexOf('await rehydratePersistedStationWorkspaces()')
+    const stationRehydrateIndex = startupSource.indexOf('await rehydratePersistedStationWorkspaces(')
     const servicesIndex = startupSource.indexOf('await window.api.app.awaitFirstWindowStartupServices()')
     const reconnectIndex = startupSource.indexOf('await useAppStore.getState().reconnectPersistedTerminals')
 

@@ -122,6 +122,56 @@ describe('rehydratePersistedStationWorkspaces', () => {
     ])
   })
 
+  it('isolates failures while hydrating persisted Station workspace renderer state', async () => {
+    const list = vi.fn().mockResolvedValue([
+      {
+        workspaceId: 'ws_ok',
+        name: 'Workspace Ok',
+        repositoryDisplay: 'repo/ok',
+        addedAt: 1,
+        updatedAt: 2
+      },
+      {
+        workspaceId: 'ws_bad',
+        name: 'Workspace Bad',
+        repositoryDisplay: 'repo/bad',
+        addedAt: 3,
+        updatedAt: 4
+      }
+    ])
+    attachStateMocks.upsertStationWorkspaceIntoRendererState.mockImplementation(
+      ({ workspaceId }: { workspaceId: string }) => {
+        if (workspaceId === 'ws_bad') {
+          throw new Error('bad station record')
+        }
+        return {
+          repoId: `station:${workspaceId}`,
+          worktreeId: `station://workspace/${workspaceId}`,
+          displayName: workspaceId
+        }
+      }
+    )
+
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          list,
+          attach: vi.fn(),
+          save: vi.fn(),
+          remove: vi.fn(),
+          detach: vi.fn()
+        }
+      }
+    })
+
+    const moduleUnderTest = await import('./station-workspace-startup')
+
+    await expect(moduleUnderTest.hydratePersistedStationWorkspaceState()).resolves.toEqual({
+      registered: ['ws_ok'],
+      failed: [{ workspaceId: 'ws_bad', message: 'bad station record' }]
+    })
+  })
+
   it('reports failed workspace registrations with their workspace ids and messages', async () => {
     const list = vi.fn().mockResolvedValue([
       {
@@ -178,6 +228,51 @@ describe('rehydratePersistedStationWorkspaces', () => {
     })
   })
 
+  it('skips duplicate renderer state hydration when prelisted workspaces were already hydrated', async () => {
+    const workspaces = [
+      {
+        workspaceId: 'ws_1',
+        name: 'Workspace One',
+        repositoryDisplay: 'repo/one',
+        addedAt: 1,
+        updatedAt: 2
+      }
+    ]
+    const attach = vi.fn().mockResolvedValue({
+      connectionId: 'station:ws_1',
+      workspaceId: 'ws_1',
+      name: 'Workspace One',
+      repositoryDisplay: 'repo/one',
+      cwd: '/tmp/ws_1'
+    })
+
+    vi.stubGlobal('window', {
+      api: {
+        stationWorkspace: {
+          list: vi.fn(),
+          attach,
+          save: vi.fn(),
+          remove: vi.fn(),
+          detach: vi.fn()
+        }
+      }
+    })
+
+    const moduleUnderTest = await import('./station-workspace-startup')
+
+    await expect(
+      moduleUnderTest.rehydratePersistedStationWorkspaces(workspaces, {
+        rendererStateHydrated: true
+      })
+    ).resolves.toEqual({
+      registered: ['ws_1'],
+      failed: []
+    })
+
+    expect(attach).toHaveBeenCalledWith({ workspaceId: 'ws_1' })
+    expect(attachStateMocks.upsertStationWorkspaceIntoRendererState).not.toHaveBeenCalled()
+  })
+
   it('reports list failures without throwing so startup can keep the station registration barrier explicit', async () => {
     const list = vi.fn().mockRejectedValue(new Error('list failed'))
     const attach = vi.fn()
@@ -208,6 +303,7 @@ describe('rehydratePersistedStationWorkspaces', () => {
   it('marks reconnect as started only immediately before reconnectPersistedTerminals runs', async () => {
     const reconnectPersistedTerminals = vi.fn().mockResolvedValue(undefined)
     const onBeforeReconnect = vi.fn()
+    const list = vi.fn().mockResolvedValue([])
 
     storeMocks.getState.mockReturnValue({
       reconnectPersistedTerminals
@@ -215,7 +311,7 @@ describe('rehydratePersistedStationWorkspaces', () => {
     vi.stubGlobal('window', {
       api: {
         stationWorkspace: {
-          list: vi.fn().mockResolvedValue([]),
+          list,
           attach: vi.fn(),
           save: vi.fn(),
           remove: vi.fn(),
@@ -238,6 +334,7 @@ describe('rehydratePersistedStationWorkspaces', () => {
     expect(onBeforeReconnect.mock.invocationCallOrder[0]).toBeLessThan(
       reconnectPersistedTerminals.mock.invocationCallOrder[0]
     )
+    expect(list).toHaveBeenCalledTimes(1)
   })
 
   it('does not mark reconnect as started when startup services fail before reconnect begins', async () => {

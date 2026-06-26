@@ -325,10 +325,14 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     }
 
     const startupModule = await import('./station-workspace-startup')
-    await startupModule.hydratePersistedStationWorkspaceState()
+    const persistedStationWorkspaces = await startupModule.listPersistedStationWorkspaces()
+    await startupModule.hydratePersistedStationWorkspaceState(persistedStationWorkspaces.workspaces)
     currentStore.getState().hydrateWorkspaceSession(session)
     currentStore.getState().hydrateTabsSession(session)
-    const startupPromise = startupModule.restorePersistedStationWorkspaceTerminals()
+    const startupPromise = startupModule.restorePersistedStationWorkspaceTerminals(undefined, {
+      prelistedWorkspaces: persistedStationWorkspaces.workspaces,
+      rendererStateHydrated: true
+    })
     await flushAsyncTicks()
 
     expect(currentStore.getState().activeRepoId).toBe(repoId)
@@ -344,7 +348,7 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
       groupId
     })
     expect(reconnectEvents).toEqual([])
-    expect(startupEvents).toEqual(['list', 'list', 'attach:start'])
+    expect(startupEvents).toEqual(['list', 'attach:start'])
     expect(currentStore.getState().repos).toEqual([
       expect.objectContaining({ id: repoId, connectionId: repoId })
     ])
@@ -355,7 +359,7 @@ describe('restorePersistedStationWorkspaceTerminals', () => {
     resolveAttach()
     await startupPromise
 
-    expect(startupEvents).toEqual(['list', 'list', 'attach:start', 'attach:resolved', 'await-services'])
+    expect(startupEvents).toEqual(['list', 'attach:start', 'attach:resolved', 'await-services'])
     expect(reconnectEvents).toEqual(['reconnect'])
     expect(currentStore.getState().tabsByWorktree[worktreeId]).toEqual([
       expect.objectContaining({ id: 'tab-1', ptyId: stationPtyId })

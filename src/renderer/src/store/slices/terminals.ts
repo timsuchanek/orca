@@ -2997,11 +2997,10 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         }
         if (!validWorktreeIds.has(worktreeId)) {
           const repoId = getRepoIdFromWorktreeId(worktreeId)
-          // Why: App startup hydrates the persisted workspace session before
-          // Station inserts synthetic repo/worktree entries into renderer
-          // state. Keep saved Station tabs alive through hydration so the
-          // later startup rehydrate can register the workspace and the normal
-          // reconnect path can reattach by saved session id.
+          // Why: normal startup inserts persisted Station repo/worktree
+          // entries before session hydration. Keep this fallback so a partial
+          // Station startup failure does not drop saved Station tabs before
+          // the later reconnect path has a chance to report a scoped failure.
           if (isStationConnectionId(repoId)) {
             validWorktreeIds.add(worktreeId)
             continue

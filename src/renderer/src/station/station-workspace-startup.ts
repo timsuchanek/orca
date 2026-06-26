@@ -6,7 +6,11 @@ type StationWorkspaceStartupFailure = {
   message: string
 }
 
-async function listPersistedStationWorkspaces(): Promise<{
+export type PersistedStationWorkspacesForStartup = Awaited<
+  ReturnType<typeof window.api.stationWorkspace.list>
+>
+
+export async function listPersistedStationWorkspaces(): Promise<{
   workspaces: Awaited<ReturnType<typeof window.api.stationWorkspace.list>>
   failed: StationWorkspaceStartupFailure[]
 }> {
@@ -24,7 +28,7 @@ async function listPersistedStationWorkspaces(): Promise<{
   }
 }
 
-function logStationStartupFailures(failures: StationWorkspaceStartupFailure[]): void {
+export function logStationStartupFailures(failures: StationWorkspaceStartupFailure[]): void {
   for (const failure of failures) {
     console.warn(
       `Station workspace startup restore skipped ${failure.workspaceId}: ${failure.message}`
@@ -32,28 +36,49 @@ function logStationStartupFailures(failures: StationWorkspaceStartupFailure[]): 
   }
 }
 
-export async function hydratePersistedStationWorkspaceState(): Promise<{
+export async function hydratePersistedStationWorkspaceState(
+  prelistedWorkspaces?: PersistedStationWorkspacesForStartup
+): Promise<{
   registered: string[]
   failed: StationWorkspaceStartupFailure[]
 }> {
-  const { workspaces, failed } = await listPersistedStationWorkspaces()
+  const listed = prelistedWorkspaces
+    ? { workspaces: prelistedWorkspaces, failed: [] }
+    : await listPersistedStationWorkspaces()
+  const { workspaces, failed: listFailures } = listed
+  const registered: string[] = []
+  const failed = [...listFailures]
   for (const workspace of workspaces) {
-    upsertStationWorkspaceIntoRendererState({
-      workspaceId: workspace.workspaceId,
-      name: workspace.name
-    })
+    try {
+      upsertStationWorkspaceIntoRendererState({
+        workspaceId: workspace.workspaceId,
+        name: workspace.name
+      })
+      registered.push(workspace.workspaceId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      failed.push({ workspaceId: workspace.workspaceId, message })
+    }
   }
   return {
-    registered: workspaces.map((workspace) => workspace.workspaceId),
+    registered,
     failed
   }
 }
 
-export async function rehydratePersistedStationWorkspaces(): Promise<{
+export async function rehydratePersistedStationWorkspaces(
+  prelistedWorkspaces?: PersistedStationWorkspacesForStartup,
+  options?: {
+    rendererStateHydrated?: boolean
+  }
+): Promise<{
   registered: string[]
   failed: StationWorkspaceStartupFailure[]
 }> {
-  const { workspaces, failed: listFailures } = await listPersistedStationWorkspaces()
+  const listed = prelistedWorkspaces
+    ? { workspaces: prelistedWorkspaces, failed: [] }
+    : await listPersistedStationWorkspaces()
+  const { workspaces, failed: listFailures } = listed
   if (listFailures.length > 0) {
     return {
       registered: [],
@@ -63,10 +88,12 @@ export async function rehydratePersistedStationWorkspaces(): Promise<{
   const results = await Promise.allSettled(
     workspaces.map(async (workspace) => {
       try {
-        upsertStationWorkspaceIntoRendererState({
-          workspaceId: workspace.workspaceId,
-          name: workspace.name
-        })
+        if (!options?.rendererStateHydrated) {
+          upsertStationWorkspaceIntoRendererState({
+            workspaceId: workspace.workspaceId,
+            name: workspace.name
+          })
+        }
         await window.api.stationWorkspace.attach({
           workspaceId: workspace.workspaceId
         })
@@ -109,9 +136,13 @@ export async function restorePersistedStationWorkspaceTerminals(
   signal?: AbortSignal,
   options?: {
     onBeforeReconnect?: () => void
+    prelistedWorkspaces?: PersistedStationWorkspacesForStartup
+    rendererStateHydrated?: boolean
   }
 ): Promise<void> {
-  const restoreResult = await rehydratePersistedStationWorkspaces()
+  const restoreResult = await rehydratePersistedStationWorkspaces(options?.prelistedWorkspaces, {
+    rendererStateHydrated: options?.rendererStateHydrated
+  })
   logStationStartupFailures(restoreResult.failed)
   await window.api.app.awaitFirstWindowStartupServices()
   options?.onBeforeReconnect?.()
