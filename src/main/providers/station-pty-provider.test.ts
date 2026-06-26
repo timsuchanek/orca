@@ -1348,6 +1348,20 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('rejects null Station PTY create responses before opening a stream', async () => {
+    vi.mocked(client.createPty).mockResolvedValueOnce(
+      null as unknown as Awaited<ReturnType<StationClient['createPty']>>
+    )
+
+    await expect(provider.spawn({ cols: 80, rows: 24 })).rejects.toThrow(
+      'Station PTY create response missing pty_id'
+    )
+
+    expect(client.openPtyStream).not.toHaveBeenCalled()
+    expect(client.closePty).not.toHaveBeenCalled()
+    expect(await provider.listProcesses()).toEqual([])
+  })
+
   it('returns shell metadata and no-op behaviors required by the provider interface', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
 
