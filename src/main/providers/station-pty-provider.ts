@@ -538,7 +538,7 @@ function parseStationPid(processId: unknown): number | null {
 
 function decodeStationMessage(payload: unknown, decoder: TextDecoder): string | null {
   if (typeof payload === 'string') {
-    return payload
+    return decoder.decode() + payload
   }
   if (payload instanceof Uint8Array) {
     return decoder.decode(payload, { stream: true })

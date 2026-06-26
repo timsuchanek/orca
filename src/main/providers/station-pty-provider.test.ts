@@ -409,6 +409,19 @@ describe('StationPtyProvider', () => {
     expect(handler).toHaveBeenCalledWith({ id, data: '�' })
   })
 
+  it('keeps pending binary UTF-8 output before following Station string frames', async () => {
+    const handler = vi.fn()
+    provider.onData(handler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    const emoji = Buffer.from('🙂', 'utf8')
+
+    socket.emit('message', emoji.subarray(0, 2), true)
+    socket.emit('message', 'prompt', false)
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledWith({ id, data: '�prompt' })
+  })
+
   it('keeps forwarding Station output when one data listener throws', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const throwingHandler = vi.fn(() => {
