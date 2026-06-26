@@ -74,7 +74,7 @@ export class StationPtyProvider implements IPtyProvider {
       rows: opts.rows,
       cols: opts.cols
     })
-    const ptySessionId = response.pty.pty_id
+    const ptySessionId = response.pty?.pty_id
     if (typeof ptySessionId !== 'string' || ptySessionId.length === 0) {
       throw new Error('Station PTY create response missing pty_id')
     }
