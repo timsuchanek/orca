@@ -298,6 +298,29 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([])
   })
 
+  it('drops queued writes quietly when a manual attach supersedes reconnect', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { id } = await provider.spawn({ cols: 80, rows: 24 })
+    socket.readyState = 0
+    const queuedReconnect = deferredPromise<StationWebSocket>()
+    const queuedSocket = new FakeWebSocket()
+    const attachedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream)
+      .mockReturnValueOnce(queuedReconnect.promise)
+      .mockResolvedValueOnce(attachedSocket)
+
+    provider.write(id, 'stale input')
+    await vi.waitFor(() => expect(client.openPtyStream).toHaveBeenCalledTimes(2))
+    await provider.attach(id)
+    queuedReconnect.resolve(queuedSocket)
+    await vi.waitFor(() => expect(queuedSocket.close).toHaveBeenCalledTimes(1))
+
+    expect(queuedSocket.send).not.toHaveBeenCalled()
+    expect(attachedSocket.send).not.toHaveBeenCalled()
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
   it('drops queued writes once explicit terminate has been requested even if close fails', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
     socket.readyState = 0

@@ -466,6 +466,9 @@ export class StationPtyProvider implements IPtyProvider {
         socket.send(payload)
       })
       .catch((error) => {
+        if (isStationPtyStreamOpenSupersededError(error)) {
+          return
+        }
         console.error('[station-pty] queued write failed', {
           id: appId,
           error: sanitizeStationPtyTransportError(error)
@@ -503,6 +506,10 @@ function decodeStationMessage(payload: unknown): string | null {
     return Buffer.from(payload).toString('utf8')
   }
   return null
+}
+
+function isStationPtyStreamOpenSupersededError(error: unknown): boolean {
+  return error instanceof Error && error.message === 'Station PTY stream open superseded'
 }
 
 function sanitizeStationPtyTransportError(error: unknown): string {
