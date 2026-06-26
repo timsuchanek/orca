@@ -1157,6 +1157,14 @@ describe('StationPtyProvider', () => {
         })
       )
     ).rejects.toThrow('Invalid Station PTY state')
+    await expect(
+      provider.revive(
+        JSON.stringify({
+          workspaceId: 'ws_123',
+          ptys: [{ ptyId: 'ssh:station%3Aws_123@@pty_wrapped', cwd: '/tmp/one', title: 'one' }]
+        })
+      )
+    ).rejects.toThrow('Invalid Station PTY state')
 
     expect(client.openPtyStream).not.toHaveBeenCalled()
     expect(await provider.listProcesses()).toEqual([])

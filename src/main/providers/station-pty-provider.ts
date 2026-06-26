@@ -1,5 +1,5 @@
 import type { StationClient, StationWebSocket } from '../station/station-client'
-import { toAppSshPtyId, toRelaySshPtyId } from './ssh-pty-id'
+import { parseAppSshPtyId, toAppSshPtyId, toRelaySshPtyId } from './ssh-pty-id'
 import type { IPtyProvider, PtySpawnOptions, PtySpawnResult } from './types'
 
 type DataCallback = (payload: { id: string; data: string }) => void
@@ -588,7 +588,12 @@ function parseSerializedState(state: string, workspaceId: string): SerializedSta
 
   const ptys = new Map<string, TrackedPty>()
   for (const entry of rawPtys) {
-    if (!isRecord(entry) || typeof entry.ptyId !== 'string' || entry.ptyId.length === 0) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.ptyId !== 'string' ||
+      entry.ptyId.length === 0 ||
+      parseAppSshPtyId(entry.ptyId) !== null
+    ) {
       throw new Error('Invalid Station PTY state')
     }
     if (!ptys.has(entry.ptyId)) {
