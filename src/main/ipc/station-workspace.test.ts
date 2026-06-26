@@ -258,6 +258,24 @@ describe('registerStationWorkspaceHandlers', () => {
     })
   })
 
+  it('trims pasted Station workspace ids before attaching', async () => {
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+
+    const result = await handlers.get('stationWorkspace:attach')!(null, {
+      workspaceId: '  ws_123\n'
+    })
+
+    expect(inspectWorkspaceMock).toHaveBeenCalledWith('ws_123')
+    expect(registerSshPtyProviderMock).toHaveBeenCalledWith(
+      stationConnectionId('ws_123'),
+      expect.anything()
+    )
+    expect(result).toMatchObject({
+      connectionId: stationConnectionId('ws_123'),
+      workspaceId: 'ws_123'
+    })
+  })
+
   it('forwards Station PTY exit events and detaches without leaving event wiring active', async () => {
     registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
     await handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })

@@ -180,7 +180,7 @@ function parseWorkspaceArgs(value: unknown): { workspaceId: string } {
   if (typeof workspaceId !== 'string' || workspaceId.trim().length === 0) {
     throw new Error('Station workspace id is required')
   }
-  return { workspaceId }
+  return { workspaceId: workspaceId.trim() }
 }
 
 function sanitizeStationAttachError(error: unknown, knownSecrets: string[]): Error {
