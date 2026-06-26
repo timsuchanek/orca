@@ -3688,6 +3688,135 @@ describe('registerPtyHandlers', () => {
     expect(sshSpawn).toHaveBeenCalledTimes(1)
   })
 
+  it('waits for Station provider startup before renderer Station spawns resolve the provider', async () => {
+    const barrier = makeDeferred()
+    const stationSpawn = vi.fn(async () => ({ id: 'ssh:station%3Aws_123@@pty_1' }))
+    const awaitProviderStartup = vi.fn((connectionId?: string | null) =>
+      connectionId === stationConnectionId('ws_123') ? barrier.promise : undefined
+    )
+    registerSshPtyProvider(stationConnectionId('ws_123'), {
+      spawn: stationSpawn,
+      write: vi.fn(),
+      resize: vi.fn(),
+      shutdown: vi.fn(),
+      sendSignal: vi.fn(),
+      getCwd: vi.fn(),
+      getInitialCwd: vi.fn(),
+      clearBuffer: vi.fn(),
+      acknowledgeDataEvent: vi.fn(),
+      hasChildProcesses: vi.fn(),
+      getForegroundProcess: vi.fn(),
+      serialize: vi.fn(),
+      revive: vi.fn(),
+      onData: vi.fn(() => () => {}),
+      onReplay: vi.fn(() => () => {}),
+      onExit: vi.fn(() => () => {}),
+      listProcesses: vi.fn(async () => []),
+      attach: vi.fn(),
+      getDefaultShell: vi.fn(),
+      getProfiles: vi.fn()
+    } as never)
+    registerPtyHandlers(
+      mainWindow as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { awaitProviderStartup }
+    )
+
+    const pendingSpawn = handlers.get('pty:spawn')!(null, {
+      cols: 80,
+      rows: 24,
+      connectionId: stationConnectionId('ws_123'),
+      env: {}
+    }) as Promise<{ id: string }>
+
+    await Promise.resolve()
+    expect(stationSpawn).not.toHaveBeenCalled()
+
+    barrier.resolve()
+    await expect(pendingSpawn).resolves.toEqual(
+      expect.objectContaining({ id: 'ssh:station%3Aws_123@@pty_1' })
+    )
+
+    expect(awaitProviderStartup).toHaveBeenCalledWith(stationConnectionId('ws_123'))
+    expect(stationSpawn).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for Station provider startup before runtime Station spawns resolve the provider', async () => {
+    const barrier = makeDeferred()
+    const stationSpawn = vi.fn(async () => ({ id: 'ssh:station%3Aws_123@@pty_1' }))
+    const awaitProviderStartup = vi.fn((connectionId?: string | null) =>
+      connectionId === stationConnectionId('ws_123') ? barrier.promise : undefined
+    )
+    const runtime = {
+      setPtyController: vi.fn(),
+      registerPty: vi.fn(),
+      onPtySpawned: vi.fn(),
+      onPtyExit: vi.fn(),
+      onPtyData: vi.fn()
+    }
+    registerSshPtyProvider(stationConnectionId('ws_123'), {
+      spawn: stationSpawn,
+      write: vi.fn(),
+      resize: vi.fn(),
+      shutdown: vi.fn(),
+      sendSignal: vi.fn(),
+      getCwd: vi.fn(),
+      getInitialCwd: vi.fn(),
+      clearBuffer: vi.fn(),
+      acknowledgeDataEvent: vi.fn(),
+      hasChildProcesses: vi.fn(),
+      getForegroundProcess: vi.fn(),
+      serialize: vi.fn(),
+      revive: vi.fn(),
+      onData: vi.fn(() => () => {}),
+      onReplay: vi.fn(() => () => {}),
+      onExit: vi.fn(() => () => {}),
+      listProcesses: vi.fn(async () => []),
+      attach: vi.fn(),
+      getDefaultShell: vi.fn(),
+      getProfiles: vi.fn()
+    } as never)
+    registerPtyHandlers(
+      mainWindow as never,
+      runtime as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { awaitProviderStartup }
+    )
+    const controller = runtime.setPtyController.mock.calls[0]?.[0] as {
+      spawn: (args: {
+        cols: number
+        rows: number
+        connectionId?: string | null
+        env?: Record<string, string>
+      }) => Promise<{ id: string }>
+    }
+
+    const pendingSpawn = controller.spawn({
+      cols: 80,
+      rows: 24,
+      connectionId: stationConnectionId('ws_123'),
+      env: {}
+    })
+
+    await Promise.resolve()
+    expect(stationSpawn).not.toHaveBeenCalled()
+
+    barrier.resolve()
+    await expect(pendingSpawn).resolves.toEqual(
+      expect.objectContaining({ id: 'ssh:station%3Aws_123@@pty_1' })
+    )
+
+    expect(awaitProviderStartup).toHaveBeenCalledWith(stationConnectionId('ws_123'))
+    expect(stationSpawn).toHaveBeenCalledTimes(1)
+  })
+
   it('lists sessions from both local and SSH providers', async () => {
     registerPtyHandlers(mainWindow as never)
     const sshListProcesses = vi.fn(async () => [

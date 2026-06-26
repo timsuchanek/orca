@@ -25,6 +25,7 @@ import {
 import { takeCurrentPtyDeliveryAckCredit } from './terminal-pty-ack-gate'
 import { serializeWithAbsoluteCursor } from '../../../../shared/terminal-serialize-absolute-cursor'
 import { isTerminalQueryReply } from '../../../../shared/terminal-query-reply'
+import { isStationConnectionId } from '../../../../shared/station-connection-id'
 import type { PtyBufferSnapshot, PtyConnectResult } from './pty-transport'
 import { createIpcPtyTransport } from './pty-transport'
 import { createRemoteRuntimePtyTransport } from './remote-runtime-pty-transport'
@@ -6667,7 +6668,7 @@ export function connectPanePty(
     // (not per-target) because multiple tabs for the same target each need
     // to reattach independently. This must run before session ID resolution
     // because the SSH provider isn't registered until after connect succeeds.
-    if (connectionId) {
+    if (connectionId && !isStationConnectionId(connectionId)) {
       const storeState = useAppStore.getState()
       // Why: the SSH target was removed entirely (a ghost workspace). Reattaching
       // can only fail with "SSH target not found", which surfaces a red "file an

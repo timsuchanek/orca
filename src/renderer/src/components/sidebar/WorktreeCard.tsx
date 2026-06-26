@@ -83,6 +83,7 @@ import { recordRendererCrashBreadcrumb } from '@/lib/crash-diagnostics'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { isRuntimeOwnedSshTargetId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { DEFAULT_AGENT_ACTIVITY_DISPLAY_MODE } from '../../../../shared/constants'
+import { isStationConnectionId } from '../../../../shared/station-connection-id'
 
 type WorktreeRenameRequest = {
   worktreeId: string
@@ -90,10 +91,6 @@ type WorktreeRenameRequest = {
 }
 
 export type ActiveSurfaceVariant = 'primary' | 'secondary'
-
-function isStationConnectionId(connectionId: string | null | undefined): boolean {
-  return connectionId?.startsWith('station:') === true
-}
 
 type WorktreeCardProps = {
   worktree: Worktree

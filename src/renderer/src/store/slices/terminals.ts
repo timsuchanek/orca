@@ -40,6 +40,7 @@ import type { ProjectExecutionRuntimeResolution } from '../../../../shared/proje
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'
 import { resolveLocalWindowsTerminalShellOverrideForTab } from '../../../../shared/local-windows-terminal-runtime'
 import { WINDOWS_GIT_BASH_SHELL } from '../../../../shared/windows-terminal-shell'
+import { isStationConnectionId } from '../../../../shared/station-connection-id'
 import type { AgentStartedTelemetry } from '../../lib/worktree-activation'
 import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-activity'
@@ -3139,7 +3140,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         const repo = worktree
           ? runtimeSessionPlaceholders.repos.find((entry) => entry.id === worktree.repoId)
           : null
-        if (repo?.connectionId) {
+        if (repo?.connectionId && !isStationConnectionId(repo.connectionId)) {
           continue
         }
         const rawTabs = session.tabsByWorktree[worktreeId] ?? []
@@ -3353,8 +3354,9 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // to reattach to a relay that isn't connected yet (the deferred/passphrase
       // targets), which would fail.
       const sshState = repo?.connectionId ? get().sshConnectionStates.get(repo.connectionId) : null
+      const isStationConnection = isStationConnectionId(repo?.connectionId)
       const sshConnected = repo?.connectionId != null && sshState?.status === 'connected'
-      const supportsDeferredReattach = !repo?.connectionId || sshConnected
+      const supportsDeferredReattach = !repo?.connectionId || isStationConnection || sshConnected
       console.debug(
         `[reconnect-terminals] worktree=${worktreeId} connectionId=${repo?.connectionId} sshStatus=${sshState?.status} supportsDeferredReattach=${supportsDeferredReattach}`
       )
@@ -3430,7 +3432,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       // map — otherwise panes fresh-spawn into a missing PTY provider.
       const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
       const repo = repoId ? get().repos.find((entry) => entry.id === repoId) : null
-      if (!repo?.connectionId) {
+      if (!repo?.connectionId || isStationConnectionId(repo.connectionId)) {
         continue
       }
       const sshConnected = get().sshConnectionStates.get(repo.connectionId)?.status === 'connected'

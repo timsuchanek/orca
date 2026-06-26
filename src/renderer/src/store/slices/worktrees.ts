@@ -77,6 +77,10 @@ import {
   getLockedWorktreeRemovalReason,
   isLockedWorktreeRemovalError
 } from '../../../../shared/worktree-removal'
+import {
+  parseStationConnectionId,
+  stationConnectionId
+} from '../../../../shared/station-connection-id'
 export type { WorktreeSlice, WorktreeDeleteState } from './worktree-helpers'
 
 // Why: old runtime servers only have `worktree.list`; preserve the large-list
@@ -104,16 +108,11 @@ type BackgroundRuntimeRefreshOptions = {
 }
 
 export function stationRepoId(workspaceId: string): string {
-  return `station:${workspaceId}`
+  return stationConnectionId(workspaceId)
 }
 
 export function parseStationWorkspaceIdFromRepoId(value: string): string | null {
-  const prefix = 'station:'
-  if (!value.startsWith(prefix)) {
-    return null
-  }
-  const workspaceId = value.slice(prefix.length).trim()
-  return workspaceId.length > 0 ? workspaceId : null
+  return parseStationConnectionId(value)?.workspaceId.trim() || null
 }
 
 export function parseStationWorkspaceIdFromWorktreeId(value: string): string | null {

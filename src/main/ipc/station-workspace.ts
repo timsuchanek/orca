@@ -38,6 +38,31 @@ type ActiveStationWorkspace = {
 }
 
 const activeStationWorkspaces = new Map<string, ActiveStationWorkspace>()
+const stationProviderStartupByConnectionId = new Map<string, Promise<void>>()
+
+function createDeferredPromise(): {
+  promise: Promise<void>
+  resolve: () => void
+  reject: (error: unknown) => void
+} {
+  let resolve!: () => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<void>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  promise.catch(() => {})
+  return { promise, resolve, reject }
+}
+
+export function awaitStationProviderStartup(
+  connectionId: string | null | undefined
+): Promise<void> | undefined {
+  if (!isStationConnectionId(connectionId)) {
+    return undefined
+  }
+  return stationProviderStartupByConnectionId.get(connectionId)
+}
 
 export function wireStationPtyEvents(args: {
   provider: StationPtyProvider
@@ -98,11 +123,14 @@ export function registerStationWorkspaceHandlers(
 
   ipcMain.handle('stationWorkspace:attach', async (_event, rawArgs: unknown) => {
     const { workspaceId } = parseWorkspaceArgs(rawArgs)
+    const connectionId = stationConnectionId(workspaceId)
     const existing = activeStationWorkspaces.get(workspaceId)
     if (existing) {
       registerSshPtyProvider(existing.connectionId, existing.provider)
       return existing.metadata
     }
+    const startupDeferred = createDeferredPromise()
+    stationProviderStartupByConnectionId.set(connectionId, startupDeferred.promise)
 
     let knownSecrets: string[] = []
     try {
@@ -124,7 +152,6 @@ export function registerStationWorkspaceHandlers(
         throw new Error(`Station workspace "${workspaceId}" provider is ${providerObserved}`)
       }
 
-      const connectionId = stationConnectionId(workspaceId)
       if (!isStationConnectionId(connectionId)) {
         throw new Error(`Invalid Station connection id for workspace "${workspaceId}"`)
       }
@@ -150,9 +177,15 @@ export function registerStationWorkspaceHandlers(
           runtime
         })
       })
+      startupDeferred.resolve()
       return metadata
     } catch (error) {
+      startupDeferred.reject(error)
       throw sanitizeStationAttachError(error, knownSecrets)
+    } finally {
+      if (stationProviderStartupByConnectionId.get(connectionId) === startupDeferred.promise) {
+        stationProviderStartupByConnectionId.delete(connectionId)
+      }
     }
   })
 
@@ -213,6 +246,7 @@ export function resetStationWorkspaceHandlersForTests(): void {
     active.provider.dispose()
   }
   activeStationWorkspaces.clear()
+  stationProviderStartupByConnectionId.clear()
 }
 
 function parseWorkspaceArgs(value: unknown): { workspaceId: string } {

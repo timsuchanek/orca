@@ -15769,6 +15769,57 @@ describe('connectPanePty', () => {
     expect(api.pty.signal).toHaveBeenCalledWith('leaf-session', 'SIGWINCH')
   })
 
+  it('reattaches restored Station panes without probing or connecting SSH', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const transport = createMockTransport()
+    transport.connect.mockImplementation(async (opts: { sessionId?: string }) => {
+      return { id: opts.sessionId ?? 'pty-new', replay: 'restored-station-output' }
+    })
+    transportFactoryQueue.push(transport)
+
+    mockStoreState = {
+      ...mockStoreState,
+      tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+      repos: [{ id: 'repo1', connectionId: 'station:ws_123' }],
+      deferredSshReconnectTargets: ['station:ws_123'],
+      deferredSshSessionIdsByTabId: { 'tab-1': 'stale-ssh-session' }
+    }
+
+    const pane = createPane(1)
+    const manager = createManager(1)
+    const deps = createDeps({
+      restoredLeafId: LEAF_1,
+      restoredPtyIdByLeafId: { [LEAF_1]: 'station-session-1' }
+    })
+
+    connectPanePty(pane as never, manager as never, deps as never)
+    await flushAsyncTicks(20)
+
+    const api = (
+      globalThis as unknown as {
+        window: {
+          api: {
+            ssh: {
+              connect: ReturnType<typeof vi.fn>
+              needsPassphrasePrompt: ReturnType<typeof vi.fn>
+            }
+          }
+        }
+      }
+    ).window.api
+    expect(api.ssh.needsPassphrasePrompt).not.toHaveBeenCalled()
+    expect(api.ssh.connect).not.toHaveBeenCalled()
+    expect(createdTransportOptions[0]).toEqual(
+      expect.objectContaining({ connectionId: 'station:ws_123' })
+    )
+    expect(transport.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'station-session-1' })
+    )
+    expect(mockStoreState.removeDeferredSshSessionId).not.toHaveBeenCalled()
+    expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(1, 'station-session-1')
+    expect(deps.updateTabPtyId).toHaveBeenCalledWith('tab-1', 'station-session-1')
+  })
+
   it('does not auto-reconnect after a user cancels deferred SSH passphrase auth', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const transport = createMockTransport()

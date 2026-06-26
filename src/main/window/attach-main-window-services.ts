@@ -16,6 +16,7 @@ import { getLocalPtyProvider, registerPtyHandlers } from '../ipc/pty'
 import { registerDaemonManagementHandlers } from '../ipc/pty-management'
 import { registerSshHandlers } from '../ipc/ssh'
 import { registerRemoteWorkspaceHandlers } from '../ipc/remote-workspace'
+import { awaitStationProviderStartup } from '../ipc/station-workspace'
 import { browserManager } from '../browser/browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from '../browser/browser-media-access'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
@@ -96,7 +97,8 @@ export function attachMainWindowServices(
     store,
     {
       awaitLocalPtyStartup: options?.awaitLocalPtyStartup,
-      isRecoveryReloadInFlight: options?.isRecoveryReloadInFlight
+      isRecoveryReloadInFlight: options?.isRecoveryReloadInFlight,
+      awaitProviderStartup: awaitStationProviderStartup
     }
   )
   // Why: the Manage Sessions settings panel (docs/daemon-staleness-ux.md §Phase 1)

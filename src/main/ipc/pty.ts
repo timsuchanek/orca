@@ -1466,6 +1466,7 @@ export function registerPtyHandlers(
     // Why: returns true (once, consuming the flag) for the crash-recovery reload
     // so its did-finish-load skips the orphan sweep and keeps live PTYs (#5787).
     isRecoveryReloadInFlight?: (webContentsId: number) => boolean
+    awaitProviderStartup?: (connectionId?: string | null) => Promise<void> | undefined
   }
 ): void {
   // Why: a re-registration means a new window owns delivery. Cancel any watchdog the
@@ -1484,6 +1485,13 @@ export function registerPtyHandlers(
     // first paint. Local spawns must wait before resolving getProvider(), while
     // SSH/headless paths do not use the desktop daemon.
     return options?.awaitLocalPtyStartup?.()
+  }
+
+  const getProviderStartupPromise = (connectionId?: string | null): Promise<void> | undefined => {
+    if (!isStationConnectionId(connectionId)) {
+      return undefined
+    }
+    return options?.awaitProviderStartup?.(connectionId)
   }
 
   // Remove any previously registered handlers so we can re-register them
@@ -2922,6 +2930,10 @@ export function registerPtyHandlers(
       if (startupPromise) {
         await startupPromise
       }
+      const providerStartupPromise = getProviderStartupPromise(args.connectionId)
+      if (providerStartupPromise) {
+        await providerStartupPromise
+      }
       await assertFolderWorkspacePtyPathUsable(args.worktreeId)
       const cwd = resolvePtySpawnStartupCwd(args.worktreeId, args.cwd)
       const provider = getProvider(args.connectionId)
@@ -3629,6 +3641,10 @@ export function registerPtyHandlers(
       const startupPromise = getLocalPtyStartupPromise(args.connectionId)
       if (startupPromise) {
         await startupPromise
+      }
+      const providerStartupPromise = getProviderStartupPromise(args.connectionId)
+      if (providerStartupPromise) {
+        await providerStartupPromise
       }
       await assertFolderWorkspacePtyPathUsable(args.worktreeId)
       // Why: honor the fallback only for fresh local spawns even if a caller

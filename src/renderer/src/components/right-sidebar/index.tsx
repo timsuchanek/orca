@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { useSidebarResize } from '@/hooks/useSidebarResize'
 import type { ActivityBarPosition } from '@/store/slices/editor'
 import { isFolderRepo } from '../../../../shared/repo-kind'
+import { isStationConnectionId } from '../../../../shared/station-connection-id'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
@@ -50,8 +51,6 @@ import {
 import { getRendererAppPlatform } from '@/lib/renderer-app-platform'
 
 const ACTIVITY_BAR_SIDE_WIDTH = 40
-const STATION_CONNECTION_PREFIX = 'station:'
-
 function RightSidebarInner(): React.JSX.Element {
   const hasDesktopWindowChrome = shouldRenderDesktopWindowChrome({
     platform: getRendererAppPlatform(),
@@ -85,7 +84,7 @@ function RightSidebarInner(): React.JSX.Element {
   const isFolderWorkspace = activeWorkspaceScope?.type === 'folder'
   const isFolder = isFolderWorkspace || (activeRepo ? isFolderRepo(activeRepo) : false)
   const repoConnectionId = activeRepo?.connectionId?.trim() ?? ''
-  const isStationRepo = repoConnectionId.startsWith(STATION_CONNECTION_PREFIX)
+  const isStationRepo = isStationConnectionId(repoConnectionId)
   const isSshRepo = Boolean(repoConnectionId) && !isStationRepo
 
   const activityItems = useMemo<ActivityBarItem[]>(
