@@ -103,8 +103,26 @@ type BackgroundRuntimeRefreshOptions = {
   reuseRecentCompatibilityFailure?: boolean
 }
 
-function stationRepoId(workspaceId: string): string {
+export function stationRepoId(workspaceId: string): string {
   return `station:${workspaceId}`
+}
+
+export function parseStationWorkspaceIdFromRepoId(value: string): string | null {
+  const prefix = 'station:'
+  if (!value.startsWith(prefix)) {
+    return null
+  }
+  const workspaceId = value.slice(prefix.length).trim()
+  return workspaceId.length > 0 ? workspaceId : null
+}
+
+export function parseStationWorkspaceIdFromWorktreeId(value: string): string | null {
+  const prefix = 'station://workspace/'
+  if (!value.startsWith(prefix)) {
+    return null
+  }
+  const workspaceId = value.slice(prefix.length).trim()
+  return workspaceId.length > 0 ? workspaceId : null
 }
 
 function getStationWorkspaceDisplayName(name: string, workspaceId: string): string {

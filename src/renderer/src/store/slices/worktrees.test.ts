@@ -96,6 +96,7 @@ const mockApi = {
 // @ts-expect-error -- test shim
 globalThis.window = { api: mockApi }
 
+import * as worktreeSlice from './worktrees'
 import {
   WORKTREE_REFRESH_CONCURRENCY,
   createWorktreeSlice,
@@ -296,6 +297,27 @@ describe('folder workspace lookups', () => {
 })
 
 describe('Station workspace synthetic state', () => {
+  it('builds the Station repo id from a workspace id', () => {
+    expect(worktreeSlice.stationRepoId('ws_123')).toBe('station:ws_123')
+  })
+
+  it('parses Station workspace ids from repo ids', () => {
+    expect(worktreeSlice.parseStationWorkspaceIdFromRepoId('station:ws_123')).toBe('ws_123')
+  })
+
+  it('parses Station workspace ids from worktree ids', () => {
+    expect(worktreeSlice.parseStationWorkspaceIdFromWorktreeId('station://workspace/ws_123')).toBe(
+      'ws_123'
+    )
+  })
+
+  it('rejects non-Station and blank Station identifiers', () => {
+    expect(worktreeSlice.parseStationWorkspaceIdFromRepoId('repo:ws_123')).toBeNull()
+    expect(worktreeSlice.parseStationWorkspaceIdFromRepoId('station:   ')).toBeNull()
+    expect(worktreeSlice.parseStationWorkspaceIdFromWorktreeId('ssh://host/repo')).toBeNull()
+    expect(worktreeSlice.parseStationWorkspaceIdFromWorktreeId('station://workspace/   ')).toBeNull()
+  })
+
   it('creates the synthetic repo and worktree with Station routing metadata', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(123_456)
     try {
