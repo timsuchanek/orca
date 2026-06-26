@@ -184,8 +184,19 @@ function parseWorkspaceArgs(value: unknown): { workspaceId: string } {
 }
 
 function sanitizeStationAttachError(error: unknown, knownSecrets: string[]): Error {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = stationAttachErrorMessage(error)
   return new Error(redactKnownSecrets(redactBearerTokens(message), knownSecrets))
+}
+
+function stationAttachErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  try {
+    return String(error)
+  } catch {
+    return '[unprintable error]'
+  }
 }
 
 function redactBearerTokens(message: string): string {

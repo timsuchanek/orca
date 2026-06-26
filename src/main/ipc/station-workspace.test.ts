@@ -371,4 +371,18 @@ describe('registerStationWorkspaceHandlers', () => {
         expect(error.message).not.toContain('station-secret')
       })
   })
+
+  it('handles unprintable Station attach errors without replacing them with stringify failures', async () => {
+    inspectWorkspaceMock.mockRejectedValue({
+      toString: () => {
+        throw new Error('stringify failed')
+      }
+    })
+    registerStationWorkspaceHandlers(mainWindow as never, runtime as never)
+
+    await expect(
+      handlers.get('stationWorkspace:attach')!(null, { workspaceId: 'ws_123' })
+    ).rejects.toThrow('[unprintable error]')
+    expect(registerSshPtyProviderMock).not.toHaveBeenCalled()
+  })
 })
