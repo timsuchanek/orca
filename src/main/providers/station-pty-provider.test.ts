@@ -231,6 +231,32 @@ describe('StationPtyProvider', () => {
     expect(await provider.listProcesses()).toEqual([{ id, cwd: '/tmp/one', title: 'orca-shell' }])
   })
 
+  it('ignores stale data events from a replaced Station stream', async () => {
+    const dataHandler = vi.fn()
+    provider.onData(dataHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const reopenedSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSocket)
+
+    await provider.attach(id)
+    socket.emit('message', Buffer.from('stale-output', 'utf8'), true)
+    reopenedSocket.emit('message', Buffer.from('fresh-output', 'utf8'), true)
+
+    expect(dataHandler).toHaveBeenCalledTimes(1)
+    expect(dataHandler).toHaveBeenCalledWith({ id, data: 'fresh-output' })
+  })
+
+  it('ignores late data events after local detach', async () => {
+    const dataHandler = vi.fn()
+    provider.onData(dataHandler)
+    const { id } = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+
+    await provider.shutdown(id, { immediate: false })
+    socket.emit('message', Buffer.from('late-output', 'utf8'), true)
+
+    expect(dataHandler).not.toHaveBeenCalled()
+  })
+
   it('does not resurrect a detached Station PTY when a queued write reconnect completes late', async () => {
     const { id } = await provider.spawn({ cols: 80, rows: 24 })
     socket.readyState = 0
@@ -332,6 +358,63 @@ describe('StationPtyProvider', () => {
       { id: second.id, cwd: '/tmp/two', title: 'orca-zsh' }
     ])
     expect(exitHandler).toHaveBeenCalledWith({ id: first.id, code: 0 })
+  })
+
+  it('keeps multiple Station PTYs isolated across writes, resize, output, reconnect, and shutdown', async () => {
+    const dataHandler = vi.fn()
+    const exitHandler = vi.fn()
+    provider.onData(dataHandler)
+    provider.onExit(exitHandler)
+    const first = await provider.spawn({ cols: 80, rows: 24, cwd: '/tmp/one' })
+    const secondSocket = new FakeWebSocket()
+    vi.mocked(client.createPty).mockResolvedValueOnce({
+      pty: trackedPty({
+        pty_id: 'pty_456',
+        process_id: '789',
+        name: 'orca-second',
+        cwd: '/tmp/two'
+      }),
+      handle: {
+        pty_id: 'pty_456',
+        process_id: '789',
+        reused: false
+      }
+    })
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(secondSocket)
+    const second = await provider.spawn({ cols: 100, rows: 30, command: 'second', cwd: '/tmp/two' })
+
+    provider.write(first.id, 'first-input')
+    provider.write(second.id, 'second-input')
+    provider.resize(first.id, 132, 55)
+    provider.resize(second.id, 90, 20)
+    socket.emit('message', Buffer.from('first-output', 'utf8'), true)
+    secondSocket.emit('message', Buffer.from('second-output', 'utf8'), true)
+    secondSocket.readyState = 0
+    const reopenedSecondSocket = new FakeWebSocket()
+    vi.mocked(client.openPtyStream).mockResolvedValueOnce(reopenedSecondSocket)
+    provider.write(second.id, 'second-after-reconnect')
+    await vi.waitFor(() =>
+      expect(reopenedSecondSocket.send).toHaveBeenCalledWith(
+        Buffer.from('second-after-reconnect', 'utf8')
+      )
+    )
+
+    await provider.shutdown(first.id, { immediate: true })
+
+    expect(socket.send).toHaveBeenCalledWith(Buffer.from('first-input', 'utf8'))
+    expect(secondSocket.send).toHaveBeenCalledWith(Buffer.from('second-input', 'utf8'))
+    expect(client.resizePty).toHaveBeenCalledWith('ws_123', 'pty_123', 132, 55)
+    expect(client.resizePty).toHaveBeenCalledWith('ws_123', 'pty_456', 90, 20)
+    expect(dataHandler).toHaveBeenCalledWith({ id: first.id, data: 'first-output' })
+    expect(dataHandler).toHaveBeenCalledWith({ id: second.id, data: 'second-output' })
+    expect(client.closePty).toHaveBeenCalledWith('ws_123', 'pty_123')
+    expect(client.closePty).not.toHaveBeenCalledWith('ws_123', 'pty_456')
+    expect(exitHandler).toHaveBeenCalledWith({ id: first.id, code: 0 })
+    expect(provider.hasPty(first.id)).toBe(false)
+    expect(provider.hasPty(second.id)).toBe(true)
+    expect(await provider.listProcesses()).toEqual([
+      { id: second.id, cwd: '/tmp/two', title: 'orca-second' }
+    ])
   })
 
   it('keeps the PTY retryable when immediate remote close fails', async () => {

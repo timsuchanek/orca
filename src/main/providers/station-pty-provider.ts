@@ -257,6 +257,9 @@ export class StationPtyProvider implements IPtyProvider {
     }
     const socket = await this.client.openPtyStream(this.workspaceId, tracked.ptyId)
     socket.on('message', (payload) => {
+      if (this.disposed || this.sockets.get(appId) !== socket || !this.trackedPtys.has(appId)) {
+        return
+      }
       const data = decodeStationMessage(payload)
       if (data === null) {
         return
