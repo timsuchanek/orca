@@ -75,6 +75,9 @@ export class StationPtyProvider implements IPtyProvider {
       cols: opts.cols
     })
     const ptySessionId = response.pty.pty_id
+    if (typeof ptySessionId !== 'string' || ptySessionId.length === 0) {
+      throw new Error('Station PTY create response missing pty_id')
+    }
     const appId = this.toAppPtyId(ptySessionId)
     const tracked = {
       ptyId: ptySessionId,
