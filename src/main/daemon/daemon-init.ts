@@ -851,6 +851,24 @@ async function createLegacyDaemonAdapters(runtimeDir: string): Promise<DaemonPty
       }
       continue
     }
+    // Why: an alive legacy daemon with zero live sessions has nothing left to
+    // preserve, but adoption would pin its node + node-pty processes forever —
+    // every protocol bump re-adopts it on the next launch. Reap it through the
+    // existing shutdown/cleanup path instead. A failed session-count query
+    // (null) fail-safes to adoption exactly as before, so a daemon whose
+    // sessions cannot be verified is never killed.
+    const liveSessionCount = await getAliveDaemonSessionCount(
+      socketPath,
+      tokenPath,
+      protocolVersion
+    )
+    if (liveSessionCount === 0) {
+      console.warn(
+        `[daemon] Shutting down idle legacy daemon (protocol v${protocolVersion}) with no live sessions`
+      )
+      await cleanupDaemonForProtocol(runtimeDir, protocolVersion)
+      continue
+    }
     // Why: old daemon PTYs can be running long-lived agents during an app
     // upgrade. Keep those sessions routed to their original daemon while new
     // terminals use the current protocol, instead of killing background work.

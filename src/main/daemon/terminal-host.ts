@@ -67,6 +67,9 @@ export type TerminalHostOptions = {
   // Why: production keeps a large cap, but tests need a small deterministic cap
   // without spawning thousands of full terminal sessions.
   maxTombstones?: number
+  // Why: lets the daemon server re-evaluate idle-exit eligibility on every
+  // session-map transition instead of polling the host.
+  onSessionCountChange?: () => void
 }
 
 export class TerminalHost {
@@ -75,11 +78,20 @@ export class TerminalHost {
   private spawnSubprocess: TerminalHostOptions['spawnSubprocess']
   private onFinalCheckpoint: TerminalHostOptions['onFinalCheckpoint']
   private maxTombstones: number
+  private onSessionCountChange: TerminalHostOptions['onSessionCountChange']
 
   constructor(opts: TerminalHostOptions) {
     this.spawnSubprocess = opts.spawnSubprocess
     this.onFinalCheckpoint = opts.onFinalCheckpoint
     this.maxTombstones = opts.maxTombstones ?? DEFAULT_MAX_TOMBSTONES
+    this.onSessionCountChange = opts.onSessionCountChange
+  }
+
+  // Why: counts every tracked session — alive, terminating, or exited-but-not-
+  // yet-reaped. Idle-exit must stay conservative: any entry in the map means
+  // the daemon may still owe someone state, so it is not idle.
+  sessionCount(): number {
+    return this.sessions.size
   }
 
   /**
@@ -151,6 +163,7 @@ export class TerminalHost {
     })
 
     this.sessions.set(opts.sessionId, session)
+    this.onSessionCountChange?.()
 
     const token = session.attachClient(opts.streamClient)
 
@@ -218,6 +231,7 @@ export class TerminalHost {
     }
     session.dispose()
     this.sessions.delete(sessionId)
+    this.onSessionCountChange?.()
   }
 
   signal(sessionId: string, sig: string): void {
@@ -358,6 +372,7 @@ export class TerminalHost {
     }
     this.sessions.clear()
     this.killedTombstones.clear()
+    this.onSessionCountChange?.()
   }
 
   private getAliveSession(sessionId: string): Session {

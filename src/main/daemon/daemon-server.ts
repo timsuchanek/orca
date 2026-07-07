@@ -8,6 +8,7 @@ import { writeFileSync, chmodSync, unlinkSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
 import { encodeNdjson, createNdjsonParser } from './ndjson'
 import { TerminalHost } from './terminal-host'
+import { DaemonIdleExit } from './daemon-idle-exit'
 import { DaemonStreamDataBatcher } from './daemon-stream-data-batcher'
 import { readCurrentProcessMacSystemResolverHealth } from '../network/macos-system-resolver-health'
 import type { SubprocessHandle } from './session'
@@ -26,6 +27,11 @@ export type DaemonServerOptions = {
   tokenPath: string
   ptySpawnHealthCheck?: () => Promise<void>
   log?: DaemonFileLog
+  /** When set, the daemon self-exits (clean shutdown, then this callback)
+   *  after idleExitGraceMs at 0 sessions and 0 connected clients. Omitted in
+   *  tests/embeds that must not tear the server down on their own. */
+  onIdleExit?: () => void
+  idleExitGraceMs?: number
   spawnSubprocess: (opts: {
     sessionId: string
     cols: number
@@ -55,6 +61,7 @@ export class DaemonServer {
   private clients = new Map<string, ConnectedClient>()
   private streamDataBatcher = new DaemonStreamDataBatcher((clientId) => this.clients.get(clientId))
   private lastInputAtBySessionId = new Map<string, number>()
+  private idleExit: DaemonIdleExit | null = null
 
   // Why: main-process PTY IPC has the same recent-input bypass, but daemon
   // output reaches main only after this stream layer. Keeping the window here
@@ -67,9 +74,26 @@ export class DaemonServer {
     this.socketPath = opts.socketPath
     this.tokenPath = opts.tokenPath
     this.token = randomUUID()
-    this.host = new TerminalHost({ spawnSubprocess: opts.spawnSubprocess })
+    this.host = new TerminalHost({
+      spawnSubprocess: opts.spawnSubprocess,
+      onSessionCountChange: () => this.idleExit?.evaluate()
+    })
     this.ptySpawnHealthCheck = opts.ptySpawnHealthCheck ?? checkPtySpawnHealth
     this.log = opts.log ?? createNoopDaemonFileLog()
+    const onIdleExit = opts.onIdleExit
+    if (onIdleExit) {
+      this.idleExit = new DaemonIdleExit({
+        graceMs: opts.idleExitGraceMs,
+        // Why: sessions are the daemon's reason to exist and a connected
+        // client means an app is (or is about to start) using this daemon.
+        // Both must be zero before the idle countdown may run.
+        isIdle: () => this.clients.size === 0 && this.host.sessionCount() === 0,
+        onExpired: () => {
+          console.warn('[daemon] No sessions and no clients for the idle grace period — exiting')
+          void this.shutdown().then(() => onIdleExit())
+        }
+      })
+    }
   }
 
   async start(): Promise<void> {
@@ -91,12 +115,18 @@ export class DaemonServer {
         } catch {
           // Best-effort on platforms that support it
         }
+        // Why: a daemon spawned by an app that dies before ever connecting
+        // must still idle-exit; arm the countdown from birth, not first use.
+        this.idleExit?.evaluate()
         resolve()
       })
     })
   }
 
   async shutdown(): Promise<void> {
+    // Why: dispose before teardown mutates client/session counts, so the idle
+    // countdown can never re-arm or fire against a half-shut-down server.
+    this.idleExit?.dispose()
     this.host.dispose()
     this.streamDataBatcher.clear()
 
@@ -177,6 +207,7 @@ export class DaemonServer {
         streamSocket: null
       }
       this.clients.set(hello.clientId, client)
+      this.idleExit?.evaluate()
       this.setupControlSocket(socket, hello.clientId)
       if (previous) {
         // Why: a reconnect can reuse a clientId before the old sockets notice
@@ -218,6 +249,7 @@ export class DaemonServer {
       this.streamDataBatcher.clear(clientId)
       client.streamSocket?.destroy()
       this.clients.delete(clientId)
+      this.idleExit?.evaluate()
     })
   }
 

@@ -54,6 +54,7 @@ type DaemonServerPrivate = {
       streamSocket: Socket | null
     }
   >
+  idleExit: { isArmed(): boolean } | null
   routeRequest(clientId: string, request: DaemonRequest): Promise<unknown>
 }
 
@@ -514,6 +515,87 @@ describe('DaemonServer', () => {
 
       const c = new DaemonClient({ socketPath, tokenPath })
       await expect(c.ensureConnected()).rejects.toThrow()
+    })
+  })
+
+  describe('idle self-exit', () => {
+    async function startServerWithIdleExit(graceMs: number): Promise<{
+      idleExited: Promise<void>
+      onIdleExit: ReturnType<typeof vi.fn>
+      lastSubprocess: () => ReturnType<typeof createMockSubprocess> | null
+    }> {
+      let resolveExited!: () => void
+      const idleExited = new Promise<void>((resolve) => {
+        resolveExited = resolve
+      })
+      const onIdleExit = vi.fn(() => resolveExited())
+      let subprocess: ReturnType<typeof createMockSubprocess> | null = null
+      server = new DaemonServer({
+        socketPath,
+        tokenPath,
+        spawnSubprocess: () => {
+          subprocess = createMockSubprocess()
+          return subprocess
+        },
+        onIdleExit,
+        idleExitGraceMs: graceMs
+      })
+      await server.start()
+      return { idleExited, onIdleExit, lastSubprocess: () => subprocess }
+    }
+
+    function idleArmed(): boolean {
+      return (server as unknown as DaemonServerPrivate).idleExit?.isArmed() ?? false
+    }
+
+    it('shuts down cleanly and calls onIdleExit after the grace period with no clients and no sessions', async () => {
+      const { idleExited, onIdleExit } = await startServerWithIdleExit(40)
+
+      await idleExited
+
+      expect(onIdleExit).toHaveBeenCalledTimes(1)
+      // The clean shutdown ran before onIdleExit — the socket no longer accepts.
+      client = new DaemonClient({ socketPath, tokenPath })
+      await expect(client.ensureConnected()).rejects.toThrow()
+    })
+
+    it('is canceled by a client connect and re-armed by the disconnect', async () => {
+      // Why a huge grace: these assertions are about arm/cancel wiring, which
+      // is observable deterministically — the countdown must never actually
+      // fire during this test. Timing semantics live in daemon-idle-exit.test.
+      const { onIdleExit } = await startServerWithIdleExit(60_000)
+      expect(idleArmed()).toBe(true)
+
+      const control = await connectRawHello('control', 'idle-exit-client')
+      expect(idleArmed()).toBe(false)
+
+      control.destroy()
+      await waitFor(() => idleArmed())
+      expect(onIdleExit).not.toHaveBeenCalled()
+    })
+
+    it('never fires while a session is alive and exits after the last session ends', async () => {
+      const { idleExited, onIdleExit, lastSubprocess } = await startServerWithIdleExit(75)
+      const daemon = server as unknown as DaemonServerPrivate
+
+      // Create a session with zero connected clients — the exact state the
+      // daemon exists for (holding sessions across app restarts).
+      await daemon.routeRequest('ghost-client', {
+        id: 'req-idle-1',
+        type: 'createOrAttach',
+        payload: { sessionId: 'idle-session', cols: 80, rows: 24 }
+      })
+      expect(idleArmed()).toBe(false)
+
+      // Bounded real-time check on top of the deterministic assertion above:
+      // 3x the grace elapses and the daemon must still be running.
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      expect(onIdleExit).not.toHaveBeenCalled()
+
+      lastSubprocess()?._simulateExit(0)
+
+      await idleExited
+      expect(onIdleExit).toHaveBeenCalledTimes(1)
     })
   })
 })
