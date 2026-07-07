@@ -574,6 +574,49 @@ describe('DaemonServer', () => {
       expect(onIdleExit).not.toHaveBeenCalled()
     })
 
+    it('destroys a pre-hello socket at idle exit instead of letting it hold the daemon open', async () => {
+      // Why: sockets that never complete hello are invisible to the client
+      // map. Without the shutdown barrier they would keep server.close() —
+      // and therefore onIdleExit — pending forever (zombie daemon), or worse,
+      // complete hello against a half-shut server.
+      const { idleExited, onIdleExit } = await startServerWithIdleExit(200)
+
+      const rawSocket = connect(socketPath)
+      const rawClosed = new Promise<void>((resolve) => rawSocket.once('close', resolve))
+      rawSocket.on('error', () => {})
+
+      await idleExited
+      await rawClosed
+
+      expect(onIdleExit).toHaveBeenCalledTimes(1)
+    })
+
+    it('refuses hello and createOrAttach once shutdown has begun', async () => {
+      const spawned: unknown[] = []
+      server = new DaemonServer({
+        socketPath,
+        tokenPath,
+        spawnSubprocess: () => {
+          const subprocess = createMockSubprocess()
+          spawned.push(subprocess)
+          return subprocess
+        }
+      })
+      await server.start()
+      await server.shutdown()
+
+      const daemon = server as unknown as DaemonServerPrivate
+      await expect(
+        daemon.routeRequest('late-client', {
+          id: 'req-late-1',
+          type: 'createOrAttach',
+          payload: { sessionId: 'late-session', cols: 80, rows: 24 }
+        })
+      ).rejects.toThrow(/shutting down/)
+      expect(spawned).toHaveLength(0)
+      expect(daemon.clients.size).toBe(0)
+    })
+
     it('never fires while a session is alive and exits after the last session ends', async () => {
       const { idleExited, onIdleExit, lastSubprocess } = await startServerWithIdleExit(75)
       const daemon = server as unknown as DaemonServerPrivate

@@ -79,6 +79,7 @@ export class TerminalHost {
   private onFinalCheckpoint: TerminalHostOptions['onFinalCheckpoint']
   private maxTombstones: number
   private onSessionCountChange: TerminalHostOptions['onSessionCountChange']
+  private disposed = false
 
   constructor(opts: TerminalHostOptions) {
     this.spawnSubprocess = opts.spawnSubprocess
@@ -101,6 +102,11 @@ export class TerminalHost {
    * already deliver them through shell launch arguments.
    */
   async createOrAttach(opts: CreateOrAttachOptions): Promise<CreateOrAttachResult> {
+    // Why: a request that slips in while the daemon is shutting down must not
+    // spawn a PTY the dying process would silently take down with it.
+    if (this.disposed) {
+      throw new Error('TerminalHost is disposed')
+    }
     const existing = this.sessions.get(opts.sessionId)
 
     // Why: a session that has been asked to terminate (kill() called but the
@@ -336,6 +342,7 @@ export class TerminalHost {
   }
 
   dispose(): void {
+    this.disposed = true
     // Why: write final checkpoints before killing sessions so graceful shutdown
     // has zero data loss. The checkpoint callback writes synchronously to disk.
     if (this.onFinalCheckpoint) {

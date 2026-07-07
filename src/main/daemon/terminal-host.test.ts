@@ -429,6 +429,20 @@ describe('TerminalHost', () => {
       expect(lastSubprocess.dispose).toHaveBeenCalled()
     })
 
+    it('rejects createOrAttach after dispose without spawning a subprocess', async () => {
+      host.dispose()
+
+      await expect(
+        host.createOrAttach({
+          sessionId: 'post-dispose',
+          cols: 80,
+          rows: 24,
+          streamClient: { onData: vi.fn(), onExit: vi.fn() }
+        })
+      ).rejects.toThrow(/disposed/)
+      expect(spawnFn).not.toHaveBeenCalled()
+    })
+
     it('releases held shell-ready marker prefixes before final checkpoint', async () => {
       host.dispose()
       const onFinalCheckpoint = vi.fn()
