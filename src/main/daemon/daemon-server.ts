@@ -95,14 +95,16 @@ export class DaemonServer {
         // Both must be zero before the idle countdown may run.
         isIdle: () => this.clients.size === 0 && this.host.sessionCount() === 0,
         onExpired: () => {
-          console.warn('[daemon] No sessions and no clients for the idle grace period — exiting')
+          // Why: the detached daemon runs with stdio 'ignore', so the file log
+          // is the only place the exit reason survives for diagnostic bundles.
+          this.log.log('idle-exit')
           // Why: idleness was just verified, so exiting after a failed
           // shutdown cannot lose sessions — but staying alive would strand a
           // half-shut daemon that can never re-arm its idle countdown.
           void this.shutdown().then(
             () => onIdleExit(),
             (err) => {
-              console.error('[daemon] Idle shutdown failed — exiting anyway:', err)
+              this.log.log('idle-exit-shutdown-error', { message: (err as Error)?.message })
               onIdleExit()
             }
           )

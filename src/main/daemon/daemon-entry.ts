@@ -131,7 +131,10 @@ async function main(): Promise<void> {
     // (see daemon-idle-exit.ts for the grace rationale). The server has
     // already shut down cleanly when this fires, so exit(0) only reaps the
     // process; next launch spawns a fresh daemon via the dead-socket path.
-    onIdleExit: () => process.exit(0)
+    onIdleExit: () => {
+      daemonLog.close()
+      process.exit(0)
+    }
   })
 
   // Signal readiness to parent via IPC (if available)
