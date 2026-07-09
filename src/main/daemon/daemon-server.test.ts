@@ -519,7 +519,10 @@ describe('DaemonServer', () => {
   })
 
   describe('idle self-exit', () => {
-    async function startServerWithIdleExit(graceMs: number): Promise<{
+    async function startServerWithIdleExit(
+      graceMs: number,
+      opts: { beforeStart?: (srv: DaemonServer) => Promise<void> } = {}
+    ): Promise<{
       idleExited: Promise<void>
       onIdleExit: ReturnType<typeof vi.fn>
       lastSubprocess: () => ReturnType<typeof createMockSubprocess> | null
@@ -540,6 +543,7 @@ describe('DaemonServer', () => {
         onIdleExit,
         idleExitGraceMs: graceMs
       })
+      await opts.beforeStart?.(server)
       await server.start()
       return { idleExited, onIdleExit, lastSubprocess: () => subprocess }
     }
@@ -618,15 +622,20 @@ describe('DaemonServer', () => {
     })
 
     it('never fires while a session is alive and exits after the last session ends', async () => {
-      const { idleExited, onIdleExit, lastSubprocess } = await startServerWithIdleExit(75)
-      const daemon = server as unknown as DaemonServerPrivate
-
-      // Create a session with zero connected clients — the exact state the
-      // daemon exists for (holding sessions across app restarts).
-      await daemon.routeRequest('ghost-client', {
-        id: 'req-idle-1',
-        type: 'createOrAttach',
-        payload: { sessionId: 'idle-session', cols: 80, rows: 24 }
+      // Why seed the session before start(): start() is what arms the
+      // countdown, so with a session already present the timer never arms at
+      // all. The invariant is proven deterministically instead of racing a
+      // cancel against a short grace on a loaded machine.
+      const { idleExited, onIdleExit, lastSubprocess } = await startServerWithIdleExit(75, {
+        beforeStart: async (srv) => {
+          // A session with zero connected clients — the exact state the
+          // daemon exists for (holding sessions across app restarts).
+          await (srv as unknown as DaemonServerPrivate).routeRequest('ghost-client', {
+            id: 'req-idle-1',
+            type: 'createOrAttach',
+            payload: { sessionId: 'idle-session', cols: 80, rows: 24 }
+          })
+        }
       })
       expect(idleArmed()).toBe(false)
 

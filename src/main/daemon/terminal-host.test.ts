@@ -516,4 +516,45 @@ describe('TerminalHost', () => {
       expect(liveSub.dispose).toHaveBeenCalled()
     })
   })
+
+  describe('onSessionCountChange', () => {
+    // Why: the daemon's idle-exit countdown arms/cancels purely off this hook;
+    // a missed notification on any transition silently disables idle exit (or
+    // worse, lets it fire with a session alive). Pin every transition.
+    it('notifies on create, natural-exit reap, and dispose', async () => {
+      const onSessionCountChange = vi.fn()
+      host.dispose()
+      host = new TerminalHost({
+        spawnSubprocess: spawnFn as MockSpawnFn,
+        onSessionCountChange
+      })
+
+      await host.createOrAttach({
+        sessionId: 'session-1',
+        cols: 80,
+        rows: 24,
+        streamClient: { onData: vi.fn(), onExit: vi.fn() }
+      })
+      expect(host.sessionCount()).toBe(1)
+      expect(onSessionCountChange).toHaveBeenCalledTimes(1)
+
+      // Natural exit reaps synchronously — this is the transition that lets
+      // an otherwise-empty daemon start its idle countdown.
+      lastSubprocess._onExitCb?.(0)
+      expect(host.sessionCount()).toBe(0)
+      expect(onSessionCountChange).toHaveBeenCalledTimes(2)
+
+      await host.createOrAttach({
+        sessionId: 'session-2',
+        cols: 80,
+        rows: 24,
+        streamClient: { onData: vi.fn(), onExit: vi.fn() }
+      })
+      expect(onSessionCountChange).toHaveBeenCalledTimes(3)
+
+      host.dispose()
+      expect(host.sessionCount()).toBe(0)
+      expect(onSessionCountChange).toHaveBeenCalledTimes(4)
+    })
+  })
 })
