@@ -55,6 +55,7 @@ type DaemonServerPrivate = {
     }
   >
   idleExit: { isArmed(): boolean } | null
+  shuttingDown: boolean
   routeRequest(clientId: string, request: DaemonRequest): Promise<unknown>
 }
 
@@ -618,6 +619,42 @@ describe('DaemonServer', () => {
         })
       ).rejects.toThrow(/shutting down/)
       expect(spawned).toHaveLength(0)
+      expect(daemon.clients.size).toBe(0)
+    })
+
+    it('destroys sockets that connect or hello after the shutdown barrier is raised', async () => {
+      // Why raise only the flag: while the listener is still accepting, the
+      // handleConnection/handleFirstMessage barriers are the only defense
+      // against a socket becoming a client on a half-shut server.
+      await startServer()
+      const daemon = server as unknown as DaemonServerPrivate
+
+      // Admitted before the barrier, hello still unsent.
+      const preBarrier = connect(socketPath)
+      await new Promise<void>((resolve) => preBarrier.once('connect', resolve))
+      const preBarrierClosed = new Promise<void>((resolve) => preBarrier.once('close', resolve))
+      preBarrier.on('error', () => {})
+
+      daemon.shuttingDown = true
+
+      // A valid late hello must be destroyed unanswered, never registered.
+      preBarrier.write(
+        encodeNdjson({
+          type: 'hello',
+          version: PROTOCOL_VERSION,
+          token: readFileSync(tokenPath, 'utf-8').trim(),
+          clientId: 'late-hello',
+          role: 'control'
+        })
+      )
+      await preBarrierClosed
+      expect(daemon.clients.size).toBe(0)
+
+      // A brand-new connection after the barrier is destroyed on arrival.
+      const postBarrier = connect(socketPath)
+      const postBarrierClosed = new Promise<void>((resolve) => postBarrier.once('close', resolve))
+      postBarrier.on('error', () => {})
+      await postBarrierClosed
       expect(daemon.clients.size).toBe(0)
     })
 
