@@ -79,8 +79,10 @@ describe('renderer startup runtime routing', () => {
       'utf8'
     )
     const stateHydrateIndex = appSource.indexOf('await hydratePersistedStationWorkspaceState(')
-    const workspaceHydrateIndex = appSource.indexOf('actions.hydrateWorkspaceSession(session)')
-    const tabsHydrateIndex = appSource.indexOf('actions.hydrateTabsSession(session)')
+    const workspaceHydrateIndex = appSource.indexOf(
+      'actions.hydrateWorkspaceSession(sessionRead.session'
+    )
+    const tabsHydrateIndex = appSource.indexOf('actions.hydrateTabsSession(sessionRead.session')
     const helperCallIndex = appSource.indexOf(
       'await restorePersistedStationWorkspaceTerminals(abortController.signal, {'
     )
@@ -122,7 +124,7 @@ describe('renderer startup runtime routing', () => {
   it('filters Station connection ids out of SSH startup reconnect targets', () => {
     const source = readFileSync(join(process.cwd(), 'src/renderer/src/App.tsx'), 'utf8')
     const sshReconnectStart = source.indexOf(
-      'const connectionIds = session.activeConnectionIdsAtShutdown ?? []'
+      'const connectionIds = sessionRead.session.activeConnectionIdsAtShutdown ?? []'
     )
     const sshReconnectEnd = source.indexOf('await Promise.allSettled(', sshReconnectStart)
     const sshReconnectBlock = source.slice(sshReconnectStart, sshReconnectEnd)

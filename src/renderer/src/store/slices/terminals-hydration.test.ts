@@ -92,6 +92,7 @@ const mockApi = {
 globalThis.window = { api: mockApi }
 
 import type { WorkspaceSessionState } from '../../../../shared/types'
+import { stationConnectionId } from '../../../../shared/station-connection-id'
 import {
   FLOATING_TERMINAL_WORKTREE_ID,
   getDefaultWorkspaceSession

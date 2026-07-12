@@ -136,6 +136,7 @@ function createDeps(worktreeId: string, ptyId = 'station-session-1') {
     restoredPtyIdByLeafId: { [LEAF_ID]: ptyId },
     paneTransportsRef: { current: new Map() },
     paneMode2031Ref: { current: new Map() },
+    paneKittyKeyboardModesRef: { current: new Map() },
     paneLastThemeModeRef: { current: new Map() },
     replayingPanesRef: { current: new Map() },
     isActiveRef: { current: true },
